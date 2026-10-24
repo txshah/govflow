@@ -145,7 +145,13 @@ export function usePersonaActor(personas: Persona[]) {
   const pending = useRef(new Map<string, Promise<DbConnection>>())
   // Open everyone's connection up front, so the first step each person takes doesn't wait on a handshake.
   useEffect(() => {
-    for (const p of personas) if (p.token && !p.observer && !pending.current.has(p.key)) pending.current.set(p.key, connectAs(p.token).catch(e => (pending.current.delete(p.key), Promise.reject(e))))
+    for (const p of personas) {
+      if (!p.token || p.observer || pending.current.has(p.key)) continue
+      const c = connectAs(p.token)
+      pending.current.set(p.key, c)
+      // A warm-up that fails is forgotten quietly; the person's first real step connects again.
+      c.catch(() => pending.current.get(p.key) === c && pending.current.delete(p.key))
+    }
   }, [personas])
   useEffect(() => {
     const map = pending.current
