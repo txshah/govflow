@@ -1,0 +1,220 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-heading: var(--font-display);
+  --font-display: var(--font-display);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
+  --color-sun: var(--sun);
+  --color-leaf: var(--leaf);
+  --color-sky: var(--sky);
+  --color-bloom: var(--bloom);
+  --color-clay: var(--clay);
+  --color-lilac: var(--lilac);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+  /* Light: warm paper, forest ink, moss, sun-gold. */
+  --background: oklch(0.972 0.018 92);
+  --foreground: oklch(0.255 0.035 162);
+  --card: oklch(0.99 0.012 95 / 0.72);
+  --card-foreground: oklch(0.255 0.035 162);
+  --popover: oklch(0.985 0.014 95);
+  --popover-foreground: oklch(0.255 0.035 162);
+  --primary: oklch(0.5 0.105 156);
+  --primary-foreground: oklch(0.985 0.02 95);
+  --secondary: oklch(0.93 0.045 125);
+  --secondary-foreground: oklch(0.3 0.05 155);
+  --muted: oklch(0.935 0.022 105);
+  --muted-foreground: oklch(0.5 0.03 150);
+  --accent: oklch(0.86 0.12 85);
+  --accent-foreground: oklch(0.3 0.06 70);
+  --destructive: oklch(0.6 0.16 38);
+  --border: oklch(0.86 0.03 120 / 0.75);
+  --input: oklch(0.86 0.03 120 / 0.9);
+  --ring: oklch(0.62 0.12 150);
+  --success: oklch(0.58 0.13 150);
+  --warning: oklch(0.72 0.15 72);
+  --info: oklch(0.58 0.08 205);
+  --sun: oklch(0.84 0.15 82);
+  --leaf: oklch(0.72 0.15 145);
+  --sky: oklch(0.83 0.06 210);
+  --bloom: oklch(0.74 0.12 18);
+  --clay: oklch(0.72 0.09 50);
+  --lilac: oklch(0.8 0.06 300);
+  --chart-1: oklch(0.6 0.13 150);
+  --chart-2: oklch(0.8 0.14 85);
+  --chart-3: oklch(0.65 0.08 205);
+  --chart-4: oklch(0.6 0.15 38);
+  --chart-5: oklch(0.45 0.07 160);
+  --radius: 1.1rem;
+  --sidebar: oklch(0.985 0.014 95);
+  --sidebar-foreground: oklch(0.255 0.035 162);
+  --sidebar-primary: oklch(0.5 0.105 156);
+  --sidebar-primary-foreground: oklch(0.985 0.02 95);
+  --sidebar-accent: oklch(0.935 0.022 105);
+  --sidebar-accent-foreground: oklch(0.255 0.035 162);
+  --sidebar-border: oklch(0.86 0.03 120 / 0.75);
+  --sidebar-ring: oklch(0.62 0.12 150);
+}
+
+.dark {
+  /* Dark: deep green-black, mint, gold. */
+  --background: oklch(0.17 0.022 168);
+  --foreground: oklch(0.94 0.02 100);
+  --card: oklch(0.22 0.03 166 / 0.66);
+  --card-foreground: oklch(0.94 0.02 100);
+  --popover: oklch(0.21 0.03 166);
+  --popover-foreground: oklch(0.94 0.02 100);
+  --primary: oklch(0.8 0.14 158);
+  --primary-foreground: oklch(0.18 0.03 165);
+  --secondary: oklch(0.28 0.04 160);
+  --secondary-foreground: oklch(0.92 0.03 120);
+  --muted: oklch(0.26 0.03 165);
+  --muted-foreground: oklch(0.72 0.03 140);
+  --accent: oklch(0.78 0.13 85);
+  --accent-foreground: oklch(0.2 0.04 80);
+  --destructive: oklch(0.7 0.15 40);
+  --border: oklch(0.36 0.04 160 / 0.6);
+  --input: oklch(0.36 0.04 160 / 0.8);
+  --ring: oklch(0.75 0.13 158);
+  --success: oklch(0.78 0.15 155);
+  --warning: oklch(0.8 0.14 78);
+  --info: oklch(0.75 0.09 205);
+  --sun: oklch(0.8 0.14 82);
+  --leaf: oklch(0.75 0.16 150);
+  --sky: oklch(0.6 0.07 215);
+  --bloom: oklch(0.7 0.12 18);
+  --clay: oklch(0.62 0.09 50);
+  --lilac: oklch(0.65 0.07 300);
+  --chart-1: oklch(0.78 0.15 155);
+  --chart-2: oklch(0.8 0.14 85);
+  --chart-3: oklch(0.75 0.09 205);
+  --chart-4: oklch(0.7 0.15 40);
+  --chart-5: oklch(0.6 0.07 160);
+  --sidebar: oklch(0.2 0.03 166);
+  --sidebar-foreground: oklch(0.94 0.02 100);
+  --sidebar-primary: oklch(0.8 0.14 158);
+  --sidebar-primary-foreground: oklch(0.18 0.03 165);
+  --sidebar-accent: oklch(0.26 0.03 165);
+  --sidebar-accent-foreground: oklch(0.94 0.02 100);
+  --sidebar-border: oklch(0.36 0.04 160 / 0.6);
+  --sidebar-ring: oklch(0.75 0.13 158);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  button:not(:disabled), [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+  html {
+    @apply font-sans;
+  }
+}
+
+/* ---------- Solarpunk surfaces & motion ---------- */
+
+body {
+  background-color: var(--background);
+}
+
+/* Sunlit sky behind everything: a warm sun, leaf light and sky haze. */
+.solar-sky {
+  background:
+    radial-gradient(60rem 36rem at 88% -8%, color-mix(in oklch, var(--sun) 38%, transparent), transparent 62%),
+    radial-gradient(48rem 32rem at -6% 18%, color-mix(in oklch, var(--sky) 45%, transparent), transparent 60%),
+    radial-gradient(56rem 40rem at 30% 112%, color-mix(in oklch, var(--leaf) 26%, transparent), transparent 62%);
+}
+.dark .solar-sky {
+  background:
+    radial-gradient(50rem 30rem at 85% -10%, color-mix(in oklch, var(--sun) 14%, transparent), transparent 60%),
+    radial-gradient(48rem 34rem at 0% 30%, color-mix(in oklch, var(--leaf) 12%, transparent), transparent 60%),
+    radial-gradient(60rem 40rem at 50% 120%, color-mix(in oklch, var(--primary) 14%, transparent), transparent 62%);
+}
+
+/* Frosted glass panel with a sunlit top edge. */
+.glass {
+  background: var(--card);
+  backdrop-filter: blur(18px) saturate(1.25);
+  -webkit-backdrop-filter: blur(18px) saturate(1.25);
+  border: 1px solid var(--border);
+  box-shadow:
+    inset 0 1px 0 color-mix(in oklch, white 70%, transparent),
+    0 1px 2px color-mix(in oklch, var(--foreground) 6%, transparent),
+    0 18px 40px -24px color-mix(in oklch, var(--primary) 35%, transparent);
+}
+.dark .glass {
+  box-shadow:
+    inset 0 1px 0 color-mix(in oklch, white 8%, transparent),
+    0 18px 40px -24px color-mix(in oklch, black 70%, transparent);
+}
+
+@keyframes solar-breathe {
+  0%, 100% { opacity: 0.55; transform: scale(1); }
+  50% { opacity: 0.9; transform: scale(1.06); }
+}
+.solar-breathe { animation: solar-breathe 6s ease-in-out infinite; transform-origin: center; }
+
+@keyframes orbit {
+  to { transform: rotate(360deg); }
+}
+.orbit { animation: orbit var(--orbit-duration, 18s) linear infinite; transform-origin: center; transform-box: fill-box; }
+
+@keyframes vine-flow {
+  to { stroke-dashoffset: -28; }
+}
+.vine-flow { stroke-dasharray: 2 12; animation: vine-flow 1.2s linear infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .solar-breathe, .orbit, .vine-flow { animation: none; }
+}

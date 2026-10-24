@@ -1,0 +1,33 @@
+{
+  "name": "govflow-api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "crs:smoke": "tsx --env-file=../.env.local src/crs/smoke.ts",
+    "stdb:smoke": "tsx --env-file=../.env.local src/stdb.smoke.ts",
+    "stdb:request-role": "tsx --env-file=../.env.local src/stdb.requestRole.ts",
+    "typecheck": "tsc --noEmit -p .",
+    "x402:serve": "tsx --env-file=../.env.local src/x402/server.ts",
+    "x402:smoke": "tsx --env-file=../.env.local src/x402/smoke.ts",
+    "seed": "tsx --env-file=../.env.local ../seed/seedDeal.ts",
+    "start": "tsx --env-file=../.env.local src/index.ts",
+    "payout:smoke": "tsx --env-file=../.env.local src/payout/smoke.ts"
+  },
+  "dependencies": {
+    "@coinbase/cdp-sdk": "^1.60.0",
+    "@x402/core": "^2.28.0",
+    "@x402/evm": "^2.28.0",
+    "@x402/express": "^2.28.0",
+    "@x402/fetch": "^2.28.0",
+    "@x402/svm": "^2.28.0",
+    "express": "^5.3.0",
+    "spacetimedb": "^2.13.0",
+    "viem": "^2.57.11"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^22.15.3",
+    "tsx": "^4.19.2",
+    "typescript": "^5.9.3"
+  }
+}

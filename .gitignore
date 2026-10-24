@@ -1,0 +1,25 @@
+# dependencies / build
+node_modules
+dist
+.next
+*.log
+.DS_Store
+
+# secrets — never commit
+.env
+.env.*
+!.env.example
+*.pem
+cdp-api-key.json
+cdp_wallet_secret.txt
+
+# SpacetimeDB per-developer config
+spacetime.local.json
+
+# Node API service identity token for SpacetimeDB
+api/.stdb-service-token
+# Demo persona login tokens written by seed/seedDeal.ts
+seed/.demo-tokens.json
+
+# Read-only observer login for the flow screen (web/scripts/request-observer.ts)
+seed/.demo-observer.json
