@@ -17,7 +17,6 @@ import { motion } from "motion/react"
 import { useTheme } from "next-themes"
 import { BookOpenCheck, Building2, Clapperboard, HardHat, Landmark, MonitorPlay, Moon, Receipt, ShieldCheck, Sun, Waypoints } from "lucide-react"
 import { Dock } from "@/components/watermelon/dock"
-import { PersonaSwitcher } from "@/components/app/persona-switcher"
 import { PulseIsland } from "@/components/app/pulse-island"
 import { SolarBackdrop } from "@/components/app/solar-backdrop"
 import { Logo } from "@/components/app/logo"
@@ -123,7 +122,6 @@ export function AppShell({ children }: { children: ReactNode }) {
             <CommandMenu />
             <DemoGuide />
             <ThemeToggle />
-            <PersonaSwitcher />
           </div>
         </div>
       </header>

@@ -17,7 +17,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { SpacetimeDBProvider, useSpacetimeDB, useTable } from "spacetimedb/react"
 import { toast } from "sonner"
 import { DbConnection, tables } from "@/lib/module_bindings"
-import { buildConnection, GUEST, safeGet, safeSet, type Persona } from "@/lib/spacetime"
+import { buildConnection, GUEST, safeSet, type Persona } from "@/lib/spacetime"
 import { readUrlFlags } from "@/lib/url-flags"
 
 type PersonaCtx = { personas: Persona[]; persona: Persona; setPersona: (key: string) => void; loaded: boolean }
@@ -42,9 +42,9 @@ export function Providers({ children }: { children: ReactNode }) {
       .then((list: Persona[]) => {
         if (cancelled) return
         setPersonas(list)
-        // ?as= wins (Live screen panes), then the saved choice, then the observer.
+        // ?as= wins (Live screen panes); otherwise the read-only observer.
         const forced = readUrlFlags().as
-        const saved = forced ?? safeGet("govflow.persona")
+        const saved = forced
         const pick = list.find(p => p.key === saved) ?? list.find(p => p.observer) ?? list[0]
         setKey(pick?.key ?? "guest")
         setLoaded(true)
