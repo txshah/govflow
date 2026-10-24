@@ -15,7 +15,7 @@ import { Check, ShieldAlert } from "lucide-react"
 import type { ReactNode } from "react"
 import type { Live } from "@/components/app/providers"
 import type { LiveStep } from "@/lib/live-steps"
-import { projectParts } from "@/lib/live-steps"
+import { IMPOSTOR_WALLET, projectParts } from "@/lib/live-steps"
 import { CRS_CHECKS } from "@/lib/verification-graph"
 import { contractNo, crsReason, docNo, fmtUsdc, short, titleCase, toDate } from "@/lib/format"
 import { cn } from "@/lib/utils"
@@ -396,6 +396,69 @@ function ReceiptDoc({ live, x, sub }: { live: Live; x: Parts; sub: boolean }) {
   )
 }
 
+// A red-flag callout pinned to part of the impostor email.
+function Flag({ n, children }: { n: number; children: ReactNode }) {
+  return (
+    <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: 0.6 + n * 0.5, type: "spring", stiffness: 320, damping: 16 }} className="ml-1 inline-grid size-4 place-items-center rounded-full bg-red-700 align-middle text-[10px] font-bold text-white">
+      {children}
+    </motion.span>
+  )
+}
+
+// The impostor's email as the city's payables inbox receives it, with what gives it away.
+function PhishingDoc({ live, x }: { live: Live; x: Parts }) {
+  const bill = x.bill1
+  const prime = live.organizations.find(o => o.kind === "PRIME")
+  const people = prime ? live.members.filter(m => m.orgId === prime.id) : []
+  const flags = [
+    ["Look-alike domain", "okafor-builders.co, not the domain Okafor signed the contract from."],
+    ["Pressure", "“URGENT” and “late fees”: rushes the clerk past a phone call."],
+    ["Unknown sender", `No “Victor Anand” at Okafor. Its verified people are ${people.map(m => titleCase(m.displayName).split(" ")[0]).join(", ") || "on file"}.`],
+    ["Brand-new wallet", "Never used before and not bound to Okafor's CRS-verified owner."],
+  ]
+  return (
+    <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} className="relative mx-auto w-full max-w-[34rem] overflow-hidden rounded-md border bg-white text-[13px] text-neutral-800 shadow-[0_12px_32px_-12px_rgba(0,0,0,0.25)] dark:bg-neutral-100">
+      <div className="flex items-center justify-between bg-neutral-800 px-4 py-2 text-xs text-white">
+        <span className="font-semibold">Inbox · ap@cityofoakridge.gov</span>
+        <span className="text-neutral-400">just now</span>
+      </div>
+      <div className="space-y-1 border-b border-neutral-200 px-4 py-3 text-[12px]">
+        <p>
+          <span className="text-neutral-500">From:</span> Victor Anand &lt;accounts@okafor-builders.co&gt;
+          <Flag n={1}>1</Flag>
+          <Flag n={3}>3</Flag>
+        </p>
+        <p><span className="text-neutral-500">To:</span> ap@cityofoakridge.gov</p>
+        <p>
+          <span className="text-neutral-500">Subject:</span> URGENT: updated payment details for {bill ? docNo(bill) : "your pay application"}
+          <Flag n={2}>2</Flag>
+        </p>
+        <p><span className="text-neutral-500">Attachment:</span> <span className="rounded bg-neutral-100 px-1">Okafor_bank_letter.pdf</span></p>
+      </div>
+      <div className="px-4 py-3 leading-relaxed">
+        <p>Hello Accounts Payable,</p>
+        <p className="mt-2">
+          Our bank account was moved after an audit. Please send {bill ? `${docNo(bill)} (${fmtUsdc(bill.amount)})` : "the pay application"} to our new wallet{" "}
+          <span className="rounded bg-red-50 px-1 font-mono text-red-800">{short(IMPOSTOR_WALLET, 8, 6)}</span>
+          <Flag n={4}>4</Flag> today. Payments to the old account will bounce and incur late fees.
+        </p>
+        <p className="mt-2">Thanks,<br />Victor Anand, Accounts Receivable · Okafor Builders</p>
+      </div>
+      <ol className="space-y-1.5 border-t border-neutral-200 bg-red-50/60 px-4 py-3 text-[12px]">
+        {flags.map(([t, d], i) => (
+          <motion.li key={t} initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.8 + i * 0.5 }} className="flex gap-2">
+            <span className="grid size-4 shrink-0 place-items-center rounded-full bg-red-700 text-[10px] font-bold text-white">{i + 1}</span>
+            <span><span className="font-semibold">{t}.</span> <span className="text-neutral-600">{d}</span></span>
+          </motion.li>
+        ))}
+      </ol>
+      <div className="border-t border-neutral-200 bg-neutral-50 px-4 py-2 text-[11px] text-neutral-500">
+        Verified wallet on file: <span className="font-mono">{short(bill?.beneficiaryWallet ?? "", 8, 6)}</span> · bound to Okafor&apos;s CRS-verified owner
+      </div>
+    </motion.div>
+  )
+}
+
 function EmailDoc({ x }: { x: Parts }) {
   const c = x.change
   if (!c) return <Placeholder text="No change requests" />
@@ -411,13 +474,33 @@ function EmailDoc({ x }: { x: Parts }) {
         <p><span className="text-neutral-500">Subject:</span> URGENT: updated payment details for {bill ? docNo(bill) : "your pay application"}</p>
       </div>
       <div className="px-4 py-4 leading-relaxed">
-        <p>Hello,</p>
-        <p className="mt-2">We changed our banking. Please pay this pay application to our new wallet <span className="rounded bg-red-50 px-1 font-mono text-red-800">{short(c.requestedWallet, 8, 6)}</span> today to avoid late fees.</p>
-        <p className="mt-2">Thanks,<br />Victor Anand, Accounts Receivable</p>
+        <p>Hello Accounts Payable,</p>
+        <p className="mt-2">Our bank account was moved after an audit. Please send {bill ? docNo(bill) : "the pay application"} to our new wallet <span className="rounded bg-red-50 px-1 font-mono text-red-800">{short(c.requestedWallet, 8, 6)}</span> today.</p>
+        <p className="mt-2">Thanks,<br />Victor Anand, Accounts Receivable · Okafor Builders</p>
       </div>
-      <div className="border-t border-neutral-200 bg-neutral-50 px-4 py-2 text-[11px] text-neutral-500">
-        Verified wallet on file: <span className="font-mono">{short(c.previousWallet, 8, 6)}</span>
+      <div className="grid grid-cols-2 border-t border-neutral-200 text-[12px]">
+        <div className="border-r border-neutral-200 bg-green-50/70 px-4 py-3">
+          <p className="text-[10px] font-semibold tracking-wide text-green-800 uppercase">On file</p>
+          <p className="mt-1 font-mono">{short(c.previousWallet, 8, 6)}</p>
+          <p className="mt-1 text-neutral-600">Owner: Okafor Builders LLC</p>
+          <p className="text-green-800">✓ CRS identity verified</p>
+          <p className="text-green-800">✓ Used on signed contract</p>
+        </div>
+        <div className="bg-red-50/70 px-4 py-3">
+          <p className="text-[10px] font-semibold tracking-wide text-red-800 uppercase">Requested</p>
+          <p className="mt-1 font-mono">{short(c.requestedWallet, 8, 6)}</p>
+          <p className="mt-1 text-neutral-600">Asked by: “Victor Anand”</p>
+          <p className="text-red-800">✗ Not a verified person</p>
+          <p className="text-red-800">✗ Never seen before</p>
+        </div>
       </div>
+      <ol className="space-y-1 border-t border-neutral-200 bg-neutral-50 px-4 py-3 text-[11.5px] text-neutral-600">
+        {["Bill frozen: no money can move", "Agent re-verifies Okafor with CRS", "Agent checks who sent the email with CRS", "Two approvers decide; neither can be the requester"].map((t, i) => (
+          <motion.li key={t} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 + i * 0.4 }}>
+            {i + 1}. {t}
+          </motion.li>
+        ))}
+      </ol>
     </motion.div>
   )
 }
@@ -566,7 +649,7 @@ export function StepDocument({ step, live, contractId }: { step: LiveStep; live:
   if (k === "sub-hire") return <ContractDoc live={live} x={x} sub nameOf={nameOf} />
   if (k === "gov-freeze") return <EmailDoc x={x} />
   if (k === "gov-reject1" || k === "gov-reject2") return <CaseFileDoc live={live} x={x} />
-  if (k === "gov-fraud") return <PayAppDoc live={live} x={x} sub={false} annotate approvals={false} />
+  if (k === "gov-fraud") return x.change ? <EmailDoc x={x} /> : <PhishingDoc live={live} x={x} />
   const line = sub ? x.line2 : x.line1
   const payerName = nameOf(sub ? x.sub?.payerOrgId : x.contract?.payerOrgId)
   const payeeName = nameOf(sub ? x.sub?.payeeOrgId : x.contract?.payeeOrgId)

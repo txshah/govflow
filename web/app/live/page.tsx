@@ -171,6 +171,7 @@ export default function LivePage() {
   useEffect(() => {
     stepRef.current = { step, projectId, as }
   }, [step, projectId, as])
+  const [retry, setRetry] = useState(0)
   const autoKey = step && view === null && (step.kind === "party" || step.kind === "screen" || step.kind === "checks") && !step.done && !busy && !holding ? `${String(projectId)}:${step.key}` : null
   useEffect(() => {
     if (!autoKey || autoRan.current === autoKey) return
@@ -198,14 +199,16 @@ export default function LivePage() {
           setPartyDone({ key: st.key, at: Date.now() })
         } catch (e) {
           setError(e instanceof Error ? e.message : String(e))
+          // Try the same step again in a moment instead of sitting stuck.
           autoRan.current = null
+          setTimeout(() => setRetry(r => r + 1), 1500)
         } finally {
           setBusy(false)
         }
       },
       isChecks ? 4500 : isScreen ? 3500 : 1500
     )
-  }, [autoKey, getLive])
+  }, [autoKey, getLive, retry])
 
   const actingNames = new Set((step?.who ?? []).map(w => personas.find(p => p.key === w.persona)?.name.toUpperCase()))
   const x = projectParts(live, projectId)

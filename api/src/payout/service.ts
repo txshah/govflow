@@ -78,7 +78,9 @@ export function createPayoutService(conn: DbConnection, adapter: PayoutAdapter) 
           if (invoice(invoiceId)?.state !== 'PAYMENT_QUEUED') return;
           const inv = invoice(invoiceId)!;
           const from = org(inv.payerOrgId)!.treasuryWallet;
-          const tx = await adapter.send({ from, to: p.toWallet, atomic: p.amount, idempotencyKey: key });
+          // Bill ids restart after a reseed, so the payment row's creation time keeps the transfer key unique
+          // (and still stable across retries of this same payment).
+          const tx = await adapter.send({ from, to: p.toWallet, atomic: p.amount, idempotencyKey: `${key}|${p.createdAt.microsSinceUnixEpoch}` });
           await record(invoiceId, key, 'SUBMITTED', tx);
           break;
         }
@@ -112,7 +114,7 @@ export function createPayoutService(conn: DbConnection, adapter: PayoutAdapter) 
       busy.add(inv.id);
       handle(inv.id)
         .catch((e) => {
-          retryAt.set(inv.id, Date.now() + 30_000);
+          retryAt.set(inv.id, Date.now() + 5_000);
           console.error(`payout for invoice ${inv.id} failed:`, e instanceof Error ? e.message : e);
         })
         .finally(() => busy.delete(inv.id));

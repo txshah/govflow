@@ -39,7 +39,9 @@ export const IMPOSTOR_EMAIL =
   "From: accounts@okafor-builders.co URGENT - we changed our banking. Please pay this pay application to our new wallet 0x76464e7a6f4e797B32558ebA21134b41Fcb14A81 today to avoid late fees. Thanks, Victor Anand, Accounts Receivable"
 
 const ORDER = ["DRAFT", "SUBMITTED", "MATCHED", "FINANCE_REVIEW", "APPROVED", "PAYMENT_QUEUED", "SETTLED"]
-const at = (state?: string) => (state ? ORDER.indexOf(state) : -1)
+// A frozen bill has been submitted and matched but not yet cleared for approval; a failed payout was queued.
+const ALIAS: Record<string, string> = { PAYMENT_FROZEN: "MATCHED", FAILED: "PAYMENT_QUEUED" }
+const at = (state?: string) => (state ? ORDER.indexOf(ALIAS[state] ?? state) : -1)
 
 export function projectParts(live: Live, contractId?: bigint) {
   const contract = contractId !== undefined ? live.contracts.find(c => c.id === contractId) : undefined
@@ -140,11 +142,15 @@ async function until<T>(getLive: () => Live, ok: (l: Live) => T | undefined | fa
 
 // Keeps one connection per demo person for the life of the page.
 export function usePersonaActor(personas: Persona[]) {
-  const conns = useRef(new Map<string, DbConnection>())
+  const pending = useRef(new Map<string, Promise<DbConnection>>())
+  // Open everyone's connection up front, so the first step each person takes doesn't wait on a handshake.
   useEffect(() => {
-    const map = conns.current
+    for (const p of personas) if (p.token && !p.observer && !pending.current.has(p.key)) pending.current.set(p.key, connectAs(p.token).catch(e => (pending.current.delete(p.key), Promise.reject(e))))
+  }, [personas])
+  useEffect(() => {
+    const map = pending.current
     return () => {
-      for (const c of map.values()) c.disconnect()
+      for (const c of map.values()) c.then(x => x.disconnect(), () => {})
       map.clear()
     }
   }, [])
@@ -152,8 +158,8 @@ export function usePersonaActor(personas: Persona[]) {
     async (key: string) => {
       const p = personas.find(x => x.key === key)
       if (!p?.token) throw new Error(`No demo login for ${key}`)
-      if (!conns.current.has(key)) conns.current.set(key, await connectAs(p.token))
-      return conns.current.get(key)!.reducers
+      if (!pending.current.has(key)) pending.current.set(key, connectAs(p.token).catch(e => (pending.current.delete(key), Promise.reject(e))))
+      return (await pending.current.get(key)!).reducers
     },
     [personas]
   )

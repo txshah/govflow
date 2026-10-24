@@ -265,16 +265,22 @@ export function StepWindows({
   if (step.kind === "fraud") {
     return (
       <Window title="Inbox · ap@cityofoakridge.gov" subtitle="demo">
-        <div className="rounded-md border border-dashed p-3 text-sm">
-          <p className="font-medium">New message from “Okafor Builders”</p>
-          <p className="mt-1 text-muted-foreground">“URGENT: we changed our banking. Please pay this pay application to our new wallet today…”</p>
+        <div className="grid grid-cols-2 gap-2 text-xs">
+          <div className="rounded-md border p-2.5">
+            <p className="font-semibold">The usual way</p>
+            <p className="mt-1 text-muted-foreground">A clerk updates the bank details from the email. The next payment goes to the thief, and nobody notices for weeks.</p>
+          </div>
+          <div className="rounded-md border border-leaf/50 bg-leaf/8 p-2.5">
+            <p className="font-semibold">With GovFlow</p>
+            <p className="mt-1 text-muted-foreground">Logging the request freezes the bill. CRS checks the sender, and two people must agree before any wallet changes.</p>
+          </div>
         </div>
-        <p className="mt-3 text-xs text-muted-foreground">Logging it in GovFlow freezes the bill until the real owner re-verifies and two approvers decide.</p>
+        <p className="mt-3 text-xs text-muted-foreground">Terrence in finance received this email. Log it as a wallet change request and see what happens.</p>
         {isCurrent && !step.done ? (
           <div className="mt-4 grid gap-2">
             <button onClick={onAct} disabled={busy} className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-destructive px-4 text-sm font-semibold text-background disabled:opacity-70">
               {busy ? <Loader2 className="size-4 animate-spin" /> : null}
-              Simulate impostor email
+              Log the wallet change request
             </button>
             <button onClick={onSkip} disabled={busy} className="inline-flex h-9 items-center justify-center rounded-md border px-4 text-sm text-muted-foreground hover:text-foreground">
               Skip, no fraud this time

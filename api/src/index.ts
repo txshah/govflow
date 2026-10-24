@@ -62,6 +62,8 @@ const sweep = () => {
   payouts.sweep();
 };
 db.myInvoice.onInsert(sweep);
+// Approval is an update, so react to it right away instead of waiting for the next timed sweep.
+db.myInvoice.onUpdate(sweep);
 db.myPayment.onInsert(sweep);
 db.myBeneficiaryChange.onInsert(sweep);
 setInterval(sweep, SWEEP_MS);

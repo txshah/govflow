@@ -53,7 +53,7 @@ export function createCdpAdapter(): PayoutAdapter {
     },
 
     async confirm(txHash) {
-      const r = await chain.waitForTransactionReceipt({ hash: txHash as Hex, timeout: 120_000 });
+      const r = await chain.waitForTransactionReceipt({ hash: txHash as Hex, timeout: 120_000, pollingInterval: 1_000 });
       return r.status === 'success';
     },
   };
