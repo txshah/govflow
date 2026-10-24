@@ -14,7 +14,7 @@ import Link from "next/link"
 import { Snowflake } from "lucide-react"
 import { useLive, type Live } from "@/components/app/providers"
 import { orgName } from "@/lib/domain"
-import { fmtUsdc, freezeReasonLabel, kindLabel, timeAgo, titleCase } from "@/lib/format"
+import { fmtUsdc, freezeReasonLabel, kindLabel, timeAgo, titleCase, docNo } from "@/lib/format"
 import { StatusBadge } from "@/components/StatusBadge"
 import { BillStepper } from "@/components/BillStepper"
 import { ApprovalPanel } from "@/components/ApprovalPanel"
@@ -32,7 +32,7 @@ export function InvoiceTable({ invoices, showActions = false, empty = "No bills 
             <Link href={`/envelope/${inv.id}`} className="min-w-0 hover:underline-offset-2">
               <div className="flex items-center gap-2">
                 <span className="text-sm font-medium">
-                  {kindLabel[inv.kind]} #{String(inv.id)}
+                  {kindLabel[inv.kind]} {docNo(inv)}
                 </span>
                 <StatusBadge state={inv.state} />
               </div>

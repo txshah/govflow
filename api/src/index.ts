@@ -13,6 +13,7 @@
  * Run: cd api && npm start
  */
 
+import { createAgentRunner } from './agents/runner.ts';
 import { NETWORK } from './config.ts';
 import { connectService, subscribe } from './stdb.ts';
 import { createAgentPayer } from './x402/client.ts';
@@ -31,6 +32,10 @@ await subscribe(svc.conn, [
   'SELECT * FROM my_invoice',
   'SELECT * FROM my_payment',
   'SELECT * FROM my_x402_receipt',
+  'SELECT * FROM my_contract',
+  'SELECT * FROM my_milestone',
+  'SELECT * FROM my_beneficiary_change',
+  'SELECT * FROM my_agent_finding',
 ]);
 const db = svc.conn.db;
 
@@ -45,15 +50,20 @@ const app = await createVerificationApp((invoiceId) => {
 await new Promise<void>((resolve) => app.listen(4021, () => resolve()));
 
 const adapter = payoutAdapterFromEnv();
-const payeeChecks = createPayeeCheckService(svc.conn, await createAgentPayer());
+// One payer for every agent, so the 0.10 per-session x402 cap covers all their paid checks together.
+const payer = await createAgentPayer();
+const agents = createAgentRunner(svc.conn, payer);
+const payeeChecks = createPayeeCheckService(svc.conn, payer);
 const payouts = createPayoutService(svc.conn, adapter);
 
 const sweep = () => {
+  agents.sweep();
   payeeChecks.sweep();
   payouts.sweep();
 };
 db.myInvoice.onInsert(sweep);
 db.myPayment.onInsert(sweep);
+db.myBeneficiaryChange.onInsert(sweep);
 setInterval(sweep, SWEEP_MS);
 sweep();
 

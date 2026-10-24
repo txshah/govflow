@@ -1,28 +1,38 @@
 /**
- * `verifyPerson()` (TransUnion identity + OFAC) and `verifyBusiness()` (owner identity, credit-file patterns, PitchPoint
- * liens/judgments, state-filing rules, OFAC on the owner and the business) for the GovFlow flow.
+ * `verifyPerson()` (TransUnion identity + Fraud Finder + OFAC) and `verifyBusiness()` (owner identity, Fraud Finder,
+ * credit-file patterns, PitchPoint liens/judgments, mock business-registry rules, OFAC on the owner and the business).
  *
  * Inputs:
  * - Person or organization reference mapped to a sandbox test identity
- * - For a business: its state filing (seeded in the demo; CRS has no filings product)
+ * - For a business: its registry record (MOCK in the demo; CRS has no business-registry or state-filing product)
  *
  * Outputs:
  * - PASS / REVIEW / FAIL with reasons, including name/DOB mismatch detection if the sandbox doesn't flag it
  *
  * The CalHacks sandbox has no business-credit or OFAC product, so a business is checked through its owner and
  * OFAC is screened against the Treasury SDN list directly (labelled `ofac_sdn:treasury`, not CRS).
- * Credit-file patterns are signals, not proof: they send a payee to REVIEW, never straight to FAIL.
+ * Credit-file patterns and Fraud Finder risk are signals, not proof: they send a payee to REVIEW, never straight to FAIL.
+ * If Fraud Finder can't be reached, a mock result is used and labelled `fraud_finder:mock` in the attestation.
  */
 
 import { crsPost } from './client.ts';
 import { screenName } from '../ofac/screen.ts';
 import { makeAttestation, type Attestation, type Decision, type IdentityFields } from './attestation.ts';
 
-export type PersonInput = IdentityFields & { street1: string; city: string; state: string; zip: string };
+export type PersonInput = IdentityFields & {
+  street1: string;
+  city: string;
+  state: string;
+  zip: string;
+  // Fraud Finder fields; must match the sandbox persona exactly.
+  email: string;
+  phone: string;
+  ip: string;
+};
 
 export type StateFiling = {
-  // Where the filing came from; always shown next to the result.
-  source: 'seeded';
+  // Where the record came from; always shown next to the result. No real registry is queried in the demo.
+  source: 'mock';
   legalName: string;
   formedOn: string;
   officers: string[];
@@ -128,6 +138,43 @@ function checkFiling(owner: PersonInput, filing: StateFiling, now: Date): string
   return reasons;
 }
 
+type FraudFinderResponse = {
+  risk?: {
+    score?: number;
+    postal?: { ip_postal_distance?: string };
+    phone?: { owner?: { first_name_match?: string; last_name_match?: string } };
+  };
+  email_validation?: { status?: string };
+};
+
+/** CRS Fraud Finder (AtData): email, phone and IP risk for the person, cross-checked against their name and address. */
+async function checkFraud(p: PersonInput): Promise<{ reasons: string[]; product: string; requestId: string | null }> {
+  try {
+    const { data, requestId } = await crsPost<FraudFinderResponse>('/fraud-finder/fraud-finder', {
+      firstName: p.firstName,
+      lastName: p.lastName,
+      phoneNumber: p.phone,
+      email: p.email,
+      ipAddress: p.ip,
+      address: { addressLine1: p.street1, city: p.city, state: p.state, postalCode: p.zip },
+    });
+    const r = data.risk ?? {};
+    const reasons: string[] = [];
+    // AtData suggests a 70–80 threshold for high risk.
+    if ((r.score ?? 0) >= 70) reasons.push(`FRAUD_SCORE_HIGH:${r.score}`);
+    else if ((r.score ?? 0) >= 40) reasons.push(`FRAUD_SCORE_MEDIUM:${r.score}`);
+    const owner = r.phone?.owner;
+    if (owner && (owner.first_name_match === 'no_match' || owner.last_name_match === 'no_match')) reasons.push('PHONE_OWNER_MISMATCH');
+    if (r.postal?.ip_postal_distance?.startsWith('>')) reasons.push('IP_FAR_FROM_ADDRESS');
+    if (data.email_validation?.status === 'invalid') reasons.push('EMAIL_INVALID');
+    return { reasons, product: 'fraud_finder', requestId };
+  } catch (e) {
+    // Mock, clearly labelled: no signals, so the other checks decide. Never invents a fraud finding.
+    console.warn('fraud finder unavailable, using mock:', e instanceof Error ? e.message : e);
+    return { reasons: [], product: 'fraud_finder:mock', requestId: null };
+  }
+}
+
 // A name match is a potential match, not proof: REVIEW holds the money until compliance clears it.
 async function checkOfac(owner: PersonInput, legalName?: string): Promise<string[]> {
   const [person, business] = await Promise.all([
@@ -142,9 +189,12 @@ async function checkOfac(owner: PersonInput, legalName?: string): Promise<string
 
 /** Identity verification for a signer or payout owner. */
 export async function verifyPerson(subjectId: string, p: PersonInput): Promise<Attestation> {
-  const [idv, ofac] = await Promise.all([checkIdentity(p), checkOfac(p)]);
-  const reasons = [...idv.reasons, ...ofac];
-  return makeAttestation(subjectId, p, ['tu_identity_verification', 'ofac_sdn:treasury'], reasons, decide(reasons), [idv.requestId]);
+  const [idv, fraud, ofac] = await Promise.all([checkIdentity(p), checkFraud(p), checkOfac(p)]);
+  const reasons = [...idv.reasons, ...fraud.reasons, ...ofac];
+  return makeAttestation(subjectId, p, ['tu_identity_verification', fraud.product, 'ofac_sdn:treasury'], reasons, decide(reasons), [
+    idv.requestId,
+    fraud.requestId,
+  ]);
 }
 
 type BljResponse = { DetailedBLJReport?: unknown };
@@ -154,22 +204,23 @@ function countFound(report: unknown, key: string): number {
   return m ? Number(m[1]) : 0;
 }
 
-/** Business check through its owner: identity, credit-file fit, liens/judgments/bankruptcies and the state filing. */
+/** Business check through its owner: identity, fraud signals, credit-file fit, liens/judgments/bankruptcies and the mock registry record. */
 export async function verifyBusiness(
   subjectId: string,
   owner: PersonInput,
   filing: StateFiling,
   now = new Date()
 ): Promise<Attestation> {
-  const [idv, credit, ofac, blj] = await Promise.all([
+  const [idv, fraud, credit, ofac, blj] = await Promise.all([
     checkIdentity(owner),
+    checkFraud(owner),
     checkCreditFile(owner, filing),
     checkOfac(owner, filing.legalName),
     crsPost<BljResponse>('/pp/fcrablj/data', {
       terms: { term: [{ person: { firstName: owner.firstName, lastName: owner.lastName, ssn: owner.ssn } }] },
     }),
   ]);
-  const reasons = [...new Set([...idv.reasons, ...credit.reasons, ...checkFiling(owner, filing, now), ...ofac])];
+  const reasons = [...new Set([...idv.reasons, ...fraud.reasons, ...credit.reasons, ...checkFiling(owner, filing, now), ...ofac])];
   for (const [key, label] of [
     ['BankruptciesFound', 'BANKRUPTCIES'],
     ['JudgmentsFound', 'JUDGMENTS'],
@@ -181,9 +232,9 @@ export async function verifyBusiness(
   return makeAttestation(
     subjectId,
     owner,
-    ['tu_identity_verification', 'tu_credit_report', 'pitchpoint_blj', 'ofac_sdn:treasury', `state_filing:${filing.source}`],
+    ['tu_identity_verification', fraud.product, 'tu_credit_report', 'pitchpoint_blj', 'ofac_sdn:treasury', `state_filing:${filing.source}`],
     reasons,
     decide(reasons),
-    [idv.requestId, credit.requestId, blj.requestId]
+    [idv.requestId, fraud.requestId, credit.requestId, blj.requestId]
   );
 }

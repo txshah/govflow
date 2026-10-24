@@ -18,18 +18,10 @@ import { BorderBeamCard, BorderBeamCardContent } from "@/components/ui/border-be
 import { HaloCard } from "@/components/ui/halo-card"
 import { Typewriter } from "@/components/ui/typewriter"
 import { agentsOf, orgName, type AgentInfo } from "@/lib/domain"
-import { fmtUsdc, timeAgo, titleCase } from "@/lib/format"
+import { fmtUsdc, scopeLabel, timeAgo, titleCase } from "@/lib/format"
 import { describeAgentStep } from "@/lib/describe"
 import { useNow } from "@/lib/use-now"
 import type { Live } from "@/components/app/providers"
-
-const scopeLabel: Record<string, string> = {
-  summarize: "Summarize evidence",
-  draft_invoice: "Draft bills",
-  match: "Match bills to contract",
-  verify: "Pay for CRS checks",
-  risk_review: "Write fraud case files",
-}
 
 function GrowthRing({ spent, limit }: { spent: bigint; limit: bigint }) {
   const pct = limit ? Math.min(1, Number((spent * 1000n) / limit) / 1000) : 0
@@ -70,7 +62,7 @@ function AgentCard({ a, live, now }: { a: AgentInfo; live: Live; now: number }) 
       <div className="flex items-center gap-4">
         <GrowthRing spent={a.spent} limit={a.limit} />
         <div className="min-w-0">
-          <p className="font-display text-xl font-semibold tracking-tight">{a.label}</p>
+          <p className="text-xl font-semibold tracking-tight">{a.label}</p>
           <p className="truncate text-xs text-muted-foreground">{titleCase(orgName(live, a.orgId))}</p>
           {a.scopes.includes("verify") ? (
             <p className="mt-0.5 text-[11px] text-muted-foreground tabular-nums">
@@ -137,7 +129,7 @@ export default function AgentsPage() {
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 + i * 0.08 }}
-            className="flex gap-3 rounded-3xl bg-secondary/40 p-4"
+            className="flex gap-3 rounded-xl bg-secondary/40 p-4"
           >
             <p.icon className="mt-0.5 size-5 shrink-0 text-primary" />
             <div>

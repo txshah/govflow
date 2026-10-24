@@ -10,6 +10,7 @@
  * - submitEvidence / inspectMilestone calls; a New bill button for the payee's preparer
  */
 
+import Link from "next/link"
 import { Check, FileText } from "lucide-react"
 import { useAct, useLive, type Live } from "@/components/app/providers"
 import { ReasonDialog } from "@/components/app/reason-dialog"
@@ -24,6 +25,7 @@ export function Milestones({ contract }: { contract: Live["contracts"][number] }
   const act = useAct()
   const me = live.me
   const lines = live.milestones.filter(m => m.contractId === contract.id).sort((a, b) => a.lineNo - b.lineNo)
+  const deal = live.deals.find(d => d.contractId === contract.id)
   const isPayeePreparer = me?.orgId === contract.payeeOrgId && me.role === "PREPARER"
   const isPayerReviewer = me?.orgId === contract.payerOrgId && me.role === "REVIEWER"
 
@@ -31,7 +33,16 @@ export function Milestones({ contract }: { contract: Live["contracts"][number] }
     <Section
       title={contract.title}
       description={`${kindLabel[contract.kind]} · ${titleCase(orgName(live, contract.payerOrgId))} pays ${titleCase(orgName(live, contract.payeeOrgId))} · ${fmtUsdc(contract.totalValue)}`}
-      actions={isPayeePreparer ? <NewBillDialog contract={contract} /> : null}
+      actions={
+        <div className="flex items-center gap-2">
+          {deal ? (
+            <Link href={`/deals/${deal.id}`} className="text-xs text-muted-foreground hover:text-foreground">
+              Contract &amp; mandates
+            </Link>
+          ) : null}
+          {isPayeePreparer ? <NewBillDialog contract={contract} /> : null}
+        </div>
+      }
     >
       <ul className="divide-y">
         {lines.map(m => (

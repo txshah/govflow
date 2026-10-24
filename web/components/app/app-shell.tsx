@@ -15,20 +15,7 @@ import { usePathname } from "next/navigation"
 import { Suspense, type ReactNode } from "react"
 import { motion } from "motion/react"
 import { useTheme } from "next-themes"
-import {
-  BookOpenCheck,
-  Bot,
-  Building2,
-  ClipboardCheck,
-  HardHat,
-  Landmark,
-  Moon,
-  Receipt,
-  ScrollText,
-  ShieldCheck,
-  Sun,
-  Waypoints,
-} from "lucide-react"
+import { BookOpenCheck, Building2, Clapperboard, HardHat, Landmark, MonitorPlay, Moon, Receipt, ShieldCheck, Sun, Waypoints } from "lucide-react"
 import { Dock } from "@/components/watermelon/dock"
 import { PersonaSwitcher } from "@/components/app/persona-switcher"
 import { PulseIsland } from "@/components/app/pulse-island"
@@ -36,23 +23,24 @@ import { SolarBackdrop } from "@/components/app/solar-backdrop"
 import { Logo } from "@/components/app/logo"
 import { useLive } from "@/components/app/providers"
 import { DemoGuide } from "@/components/app/demo-guide"
+import { CommandMenu } from "@/components/app/command-menu"
+import { useEmbed } from "@/lib/url-flags"
 
 const GROUPS = [
   [
+    { id: "story", label: "Project story · full demo", href: "/story", Icon: Clapperboard },
     { id: "flow", label: "Payment flow", href: "/", Icon: Waypoints },
-    { id: "agents", label: "Agents", href: "/agents", Icon: Bot },
+    { id: "live", label: "Live · run it step by step", href: "/live", Icon: MonitorPlay },
     { id: "bills", label: "Bills", href: "/bills", Icon: Receipt },
   ],
   [
     { id: "agency", label: "Agency room", href: "/agency", Icon: Landmark },
     { id: "prime", label: "Prime contractor room", href: "/prime", Icon: Building2 },
     { id: "sub", label: "Subcontractor room", href: "/sub", Icon: HardHat },
-    { id: "inspector", label: "Site inspection", href: "/inspector", Icon: ClipboardCheck },
   ],
   [
-    { id: "ledger", label: "Ledger", href: "/ledger", Icon: BookOpenCheck },
-    { id: "audit", label: "Audit log", href: "/audit", Icon: ScrollText },
     { id: "vendors", label: "Vendor checks", href: "/answer-key", Icon: ShieldCheck },
+    { id: "ledger", label: "Ledger", href: "/ledger", Icon: BookOpenCheck },
   ],
 ]
 
@@ -94,7 +82,26 @@ function AnimatedPage({ children }: { children: ReactNode }) {
   )
 }
 
+// The dock floats over every page except Live, which is a full workspace (⌘K still navigates).
+function DockSlot() {
+  const path = usePathname()
+  if (path.startsWith("/live")) return null
+  return (
+    <div className="fixed inset-x-0 bottom-5 z-30 flex justify-center px-4">
+      <Dock groups={GROUPS} />
+    </div>
+  )
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
+  const embed = useEmbed()
+  if (embed)
+    return (
+      <div className="relative min-h-svh">
+        <SolarBackdrop />
+        <main className="w-full px-4 pt-4 pb-10">{children}</main>
+      </div>
+    )
   return (
     <div className="relative min-h-svh">
       <SolarBackdrop />
@@ -105,7 +112,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <Link href="/" className="flex items-center gap-2.5 justify-self-start pt-1">
             <Logo className="size-8" />
             <span className="grid leading-none">
-              <span className="font-display text-lg font-semibold tracking-tight">GovFlow</span>
+              <span className="text-lg font-semibold tracking-tight">GovFlow</span>
               <ProjectLabel />
             </span>
           </Link>
@@ -113,6 +120,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <PulseIsland />
           </div>
           <div className="flex items-center gap-2 justify-self-end">
+            <CommandMenu />
             <DemoGuide />
             <ThemeToggle />
             <PersonaSwitcher />
@@ -122,11 +130,9 @@ export function AppShell({ children }: { children: ReactNode }) {
       <Suspense fallback={<main className="mx-auto max-w-6xl px-4 pt-6 md:px-8">{children}</main>}>
         <AnimatedPage>{children}</AnimatedPage>
       </Suspense>
-      <div className="fixed inset-x-0 bottom-5 z-30 flex justify-center px-4">
-        <Suspense fallback={null}>
-          <Dock groups={GROUPS} />
-        </Suspense>
-      </div>
+      <Suspense fallback={null}>
+        <DockSlot />
+      </Suspense>
     </div>
   )
 }

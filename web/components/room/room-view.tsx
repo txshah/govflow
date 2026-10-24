@@ -13,6 +13,7 @@
 
 import { useState } from "react"
 import { useSearchParams } from "next/navigation"
+import { useEmbed } from "@/lib/url-flags"
 import { Bot, Eye, Receipt, Send, Shovel, Users } from "lucide-react"
 import { FluidTabs } from "@/components/watermelon/fluid-tabs"
 import { Button } from "@/components/ui/button"
@@ -43,6 +44,7 @@ export function RoomView({ kind, focus }: { kind: "AGENCY" | "PRIME" | "SUB"; fo
   const org = chainOrgs(live)[kind === "AGENCY" ? "agency" : kind === "PRIME" ? "prime" : "sub"]
   const [comment, setComment] = useState("")
   // ?tab=work (from the demo guide) picks the tab; a click overrides it until the URL changes again.
+  const embed = useEmbed()
   const urlTab = useSearchParams().get("tab")
   const fallbackTab = urlTab ?? (focus === "inspection" ? "work" : "bills")
   const [picked, setPicked] = useState<{ url: string | null; tab: string } | null>(null)
@@ -78,7 +80,7 @@ export function RoomView({ kind, focus }: { kind: "AGENCY" | "PRIME" | "SUB"; fo
 
   return (
     <>
-      <div aria-hidden className={`pointer-events-none fixed top-16 left-1/2 -z-[5] h-72 w-[48rem] -translate-x-1/2 rounded-full opacity-40 blur-3xl ${orgHue[org.kind]?.soft ?? ""}`} />
+      <div aria-hidden className={`pointer-events-none fixed ${embed ? "hidden" : ""} top-16 left-1/2 -z-[5] h-72 w-[48rem] -translate-x-1/2 rounded-full opacity-40 blur-3xl ${orgHue[org.kind]?.soft ?? ""}`} />
       <PageHeader
         eyebrow={
           <span className="inline-flex items-center gap-1.5">
@@ -88,7 +90,7 @@ export function RoomView({ kind, focus }: { kind: "AGENCY" | "PRIME" | "SUB"; fo
         }
         title={titleCase(org.name)}
         description={blurbs[focus === "inspection" ? "INSPECTION" : kind]}
-        actions={
+        meta={
           <>
             <VerificationBadge verified={org.verified} hash={org.identityHash} decision={orgVerification?.decision} reasons={orgVerification?.reasons} />
             {kind !== "AGENCY" ? <WalletBinding org={org} pending={pendingChanges} /> : null}
@@ -96,17 +98,16 @@ export function RoomView({ kind, focus }: { kind: "AGENCY" | "PRIME" | "SUB"; fo
         }
       />
 
-      {!mine ? (
-        <div className="mb-6 flex flex-wrap items-center gap-3 rounded-xl border border-dashed bg-muted/40 px-4 py-3 text-sm">
-          <Eye className="size-4 text-muted-foreground" />
-          <span className="flex-1 text-muted-foreground">
-            {persona.observer
-              ? "You're the observer: you can see this room but not act in it."
-              : `You're signed in as ${titleCase(persona.name)}${live.me ? "" : " (no organization)"}. This room is private to ${titleCase(org.name)}.`}
+      {!mine && !embed ? (
+        <div className="mb-6 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl bg-muted/50 px-4 py-2.5 text-sm">
+          <Eye className="size-4 shrink-0 text-muted-foreground" />
+          <span className="min-w-0 flex-1 text-muted-foreground">
+            {persona.observer ? "Viewing as observer · read only" : `Signed in as ${titleCase(persona.name)} · not in this organization`}
           </span>
+          <span className="text-xs text-muted-foreground">Act as</span>
           {peopleHere.slice(0, 3).map(p => (
-            <Button key={p.key} size="sm" variant="outline" onClick={() => setPersona(p.key)}>
-              Sign in as {titleCase(p.name).split(" ")[0]} · {p.title}
+            <Button key={p.key} size="sm" variant="outline" className="rounded-full" title={p.title} onClick={() => setPersona(p.key)}>
+              {titleCase(p.name).split(" ")[0]}
             </Button>
           ))}
         </div>
@@ -114,7 +115,7 @@ export function RoomView({ kind, focus }: { kind: "AGENCY" | "PRIME" | "SUB"; fo
 
       {canSee || live.me ? (
         <>
-          <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className={embed ? "mb-4 grid grid-cols-[repeat(auto-fit,minmax(8rem,1fr))] gap-2" : "mb-6 grid grid-cols-[repeat(auto-fit,minmax(13rem,1fr))] gap-3"}>
             {kind !== "SUB" ? (
               <StatTile label="Paid out" value={<><RollingNumber precision={2} value={Number(paidOut) / 1e6} format={n => n.toFixed(2)} /> <span className="text-sm font-normal text-muted-foreground">USDC</span></>} />
             ) : null}

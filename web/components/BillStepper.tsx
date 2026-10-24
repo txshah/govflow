@@ -42,7 +42,7 @@ export function BillStepper({ invoice, size = "compact" }: { invoice: Live["invo
                 "relative grid place-items-center rounded-full",
                 full ? "size-7" : "size-4",
                 st.status === "done" && "bg-leaf text-background",
-                st.status === "current" && "bg-sun text-foreground shadow-[0_0_14px] shadow-sun",
+                st.status === "current" && "bg-sun text-foreground",
                 st.status === "blocked" && "bg-destructive text-background",
                 st.status === "pending" && "border border-border bg-background"
               )}

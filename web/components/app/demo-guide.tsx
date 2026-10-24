@@ -16,7 +16,7 @@ import { Check, Clapperboard, LogIn, Play, ShieldCheck, Snowflake, Zap } from "l
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { useLive, usePersonas } from "@/components/app/providers"
 import { demoScript, type DemoStep } from "@/lib/demo-script"
-import { fmtUsdc, titleCase } from "@/lib/format"
+import { fmtUsdc, titleCase, docNo } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
 const LEVELS = [
@@ -41,13 +41,13 @@ export function DemoGuide() {
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
-      <SheetTrigger className="glass inline-flex h-10 items-center gap-2 rounded-full px-3.5 text-sm font-medium transition-colors hover:text-primary">
+      <SheetTrigger className="glass inline-flex h-10 items-center gap-2 rounded-lg px-3.5 text-sm font-medium transition-colors hover:text-primary">
         <Clapperboard className="size-4" />
         <span className="hidden sm:inline">Demo</span>
       </SheetTrigger>
       <SheetContent side="right" className="w-full gap-0 overflow-y-auto sm:max-w-md">
         <SheetHeader className="pb-2">
-          <SheetTitle className="font-display text-2xl">Demo script</SheetTitle>
+          <SheetTitle className="text-2xl">Demo script</SheetTitle>
           <SheetDescription>Follow the steps in order. Each one ticks off by itself when it happens.</SheetDescription>
         </SheetHeader>
 
@@ -69,7 +69,7 @@ export function DemoGuide() {
               <>
                 <span className="font-medium text-foreground">{script.contract.title}</span>
                 {script.milestone ? ` · line ${script.milestone.lineNo}, up to ${fmtUsdc(script.milestone.scheduledValue)}` : ""}
-                {script.invoice ? ` · bill #${script.invoice.id}` : ""}
+                {script.invoice ? ` · ${docNo(script.invoice)}` : ""}
               </>
             ) : (
               "No contract visible. Sign in as the observer."

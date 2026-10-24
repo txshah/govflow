@@ -2,14 +2,15 @@
  * End-to-end smoke test against the shared database: walks one small bill from evidence to SETTLED, with `npm start` doing the outside work.
  *
  * Inputs:
- * - Level: `sub` (prime pays sub 0.15, default) or `prime` (agency pays prime 0.40)
+ * - Level: `sub` (prime pays sub 0.15, default) or `prime` (agency pays prime 0.40); add `fraud` to run the
+ *   wallet-change email beat (freeze → risk case file → approvers reject the change) before approval
  * - seed/.demo-tokens.json demo logins, the service token, a running API
  *
  * Outputs:
  * - One line per step; the final payment row with its tx hash; non-zero exit if the bill doesn't settle
  *
  * Bills the next unbilled milestone at that level, so it runs once per milestone (reseed to start over).
- * Run: cd api && npm start (in another terminal), then npm run payout:smoke [-- prime]
+ * Run: cd api && npm start (in another terminal), then npm run payout:smoke [-- prime [fraud]]
  */
 
 import { readFileSync } from 'node:fs';
@@ -23,6 +24,7 @@ const LEVELS = {
     approvers: ['agencyFin1', 'agencyFin2'], matcher: 'agency-agent' },
 } as const;
 const level = LEVELS[(process.argv[2] ?? 'sub') as keyof typeof LEVELS];
+const fraud = process.argv.includes('fraud');
 if (!level) throw new Error('level must be "sub" or "prime"');
 const usdc = (n: bigint) => (Number(n) / 1e6).toFixed(2);
 
@@ -40,6 +42,7 @@ const [sub, inspector, ctrl1, ctrl2, svc] = await Promise.all([
   connectService().then((s) => s.conn),
 ]);
 await subscribe(sub, ['SELECT * FROM my_contract', 'SELECT * FROM my_milestone', 'SELECT * FROM my_invoice', 'SELECT * FROM my_payment']);
+await subscribe(ctrl1, ['SELECT * FROM my_agent_finding', 'SELECT * FROM my_invoice']);
 const db = sub.db;
 
 const contract = [...db.myContract.iter()].find((c) => c.kind === level.contractKind);
@@ -66,9 +69,10 @@ const inv = await waitFor('draft', () => [...db.myInvoice.iter()].find((i) => !b
 await sub.reducers.submitInvoice({ invoiceId: inv.id });
 step(`${level.preparer} drafted and submitted bill ${inv.id} for ${usdc(level.amount)} USDC`);
 
-// Matching belongs to the agents runner, which isn't built yet; record a clean match as the payer's agent.
-await svc.reducers.recordMatch({ invoiceId: inv.id, agentId: level.matcher, result: 'MATCHED', reasons: 'smoke: matches accepted milestone', modelId: 'smoke' });
-step(`recorded MATCHED for ${level.matcher}; waiting for the API to run the x402 + CRS payee check`);
+step(`waiting for ${level.matcher} (Claude) to match it, then the x402 + CRS payee check`);
+const matched = await waitFor('match', () => [...db.myInvoice.iter()].find((i) => i.id === inv.id && i.matchResult !== ''), 120_000);
+step(`${level.matcher} match: ${matched.matchResult}: ${matched.matchReasons.split('\n')[0]}`);
+if (matched.matchResult !== 'MATCHED') process.exit(1);
 
 const afterCheck = await waitFor('payee check', () => {
   const s = invoiceState(inv.id);
@@ -76,6 +80,26 @@ const afterCheck = await waitFor('payee check', () => {
 }, 180_000);
 step(`payee check done: bill is ${afterCheck}`);
 if (afterCheck !== 'FINANCE_REVIEW') process.exit(1);
+
+if (fraud) {
+  const impostor = process.env.GOVFLOW_IMPOSTOR_ADDRESS!;
+  // Email intake: the service files the change on the payer's behalf, as the inbox integration would.
+  await svc.reducers.changeBeneficiary({
+    invoiceId: inv.id,
+    requestedWallet: impostor,
+    source: 'EMAIL',
+    note: `From: accounts@okafor-builders.co\nURGENT - we changed our banking. Please pay this pay application to our new wallet ${impostor} today to avoid late fees. Thanks, Victor Anand, Accounts Receivable`,
+  });
+  step('impostor email filed a wallet change; waiting for the freeze and the risk case file');
+  await waitFor('freeze', () => (invoiceState(inv.id) === 'PAYMENT_FROZEN' || undefined));
+  const rc = await waitFor('risk case', () => [...ctrl1.db.myAgentFinding.iter()].find((f) => f.kind === 'RISK_CASE' && f.subjectId === inv.id), 240_000);
+  step(`risk case (${rc.modelId}): ${rc.result} [${rc.flags}]`);
+  console.log(rc.body.split('\n').map((l) => `    ${l}`).join('\n'));
+  await ctrl1.reducers.voteUnfreeze({ invoiceId: inv.id, vote: 'REJECT_CHANGE', reason: 'smoke: impostor failed CRS' });
+  await ctrl2.reducers.voteUnfreeze({ invoiceId: inv.id, vote: 'REJECT_CHANGE', reason: 'smoke: confirmed with prime by phone' });
+  await waitFor('unfreeze', () => (invoiceState(inv.id) === 'FINANCE_REVIEW' || undefined));
+  step('two approvers rejected the change; bill back in FINANCE_REVIEW on the original wallet');
+}
 
 await ctrl1.reducers.approveInvoice({ invoiceId: inv.id, reason: 'smoke: approver 1' });
 await ctrl2.reducers.approveInvoice({ invoiceId: inv.id, reason: 'smoke: approver 2' });

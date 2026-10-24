@@ -88,7 +88,9 @@ export default function LedgerPage() {
                   {[...balances.entries()].map(([acct, bal]) => (
                     <div key={acct} className="rounded-lg bg-muted/60 p-3">
                       <p className="text-xs text-muted-foreground">{acct}</p>
-                      <p className="text-sm font-semibold tabular-nums">{fmtUsdc(bal < 0n ? -bal : bal)} {bal < 0n ? "Cr" : bal > 0n ? "Dr" : ""}</p>
+                      <p className="text-sm font-semibold tabular-nums" title={bal < 0n ? "credit balance" : bal > 0n ? "debit balance" : "settled"}>
+                        {bal === 0n ? fmtUsdc(0n) : `${bal < 0n ? "−" : "+"}${fmtUsdc(bal < 0n ? -bal : bal)}`}
+                      </p>
                     </div>
                   ))}
                 </div>

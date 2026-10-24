@@ -39,7 +39,7 @@ export const Dock: FC<DockProps> = ({ groups }) => {
         layout
         transition={dockSpring}
         aria-label="Main"
-        className="glass relative flex items-end gap-2 rounded-[1.75rem] px-3 py-2 sm:gap-3"
+        className="glass relative flex items-end gap-2 rounded-xl px-3 py-2 sm:gap-3"
       >
         {groups.map((items, gi) => (
           <React.Fragment key={gi}>
@@ -63,7 +63,7 @@ export const Dock: FC<DockProps> = ({ groups }) => {
                         className={cn(
                           'grid size-10 place-items-center rounded-2xl transition-colors',
                           active
-                            ? 'bg-primary text-primary-foreground shadow-[0_6px_18px_-6px] shadow-primary/60'
+                            ? 'bg-primary text-primary-foreground'
                             : 'bg-muted/70 text-muted-foreground hover:bg-background hover:text-foreground',
                         )}
                       >

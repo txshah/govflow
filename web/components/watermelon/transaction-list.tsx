@@ -6,7 +6,7 @@ import {
 } from 'motion/react';
 
 import { useState } from 'react';
-import { ArrowRight, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import useMeasure from 'react-use-measure';
 
 export interface Transaction {
@@ -48,10 +48,10 @@ export function TransactionList({
   return (
     <MotionConfig transition={springConfig}>
       <motion.div
-        className="theme-injected bg-muted border-border flex items-center justify-center overflow-hidden rounded-lg border shadow-sm"
+        className="theme-injected bg-muted/50 border-border flex items-center justify-center overflow-hidden rounded-2xl border"
         animate={{ height: bounds.height > 0 ? bounds.height : 'auto' }}
       >
-        <div className="p-3" ref={ref}>
+        <div className="w-full p-3" ref={ref}>
           <AnimatePresence mode="popLayout">
             {!open && (
               <motion.div
@@ -60,11 +60,8 @@ export function TransactionList({
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={opacityConfig}
-                className="flex w-64 flex-col gap-2"
+                className="flex w-full flex-col gap-3"
               >
-                <span className="text-muted-foreground font-medium">
-                  Transaction
-                </span>
 
                 {transactions.map((item) => (
                   <TransactionItem
@@ -74,10 +71,6 @@ export function TransactionList({
                   />
                 ))}
 
-                <button className="text-foreground flex items-center justify-center gap-1 rounded-sm py-1">
-                  <p className="text-sm">All transactions</p>
-                  <ArrowRight size={14} />
-                </button>
               </motion.div>
             )}
           </AnimatePresence>
@@ -105,9 +98,9 @@ function TransactionItem({
   onClick: () => void;
 }) {
   return (
-    <div className="flex w-64 cursor-pointer gap-2" onClick={onClick}>
+    <div className="flex w-full cursor-pointer items-center gap-3 rounded-xl p-1 transition-colors hover:bg-background/60" onClick={onClick}>
       <motion.div
-        className="bg-foreground flex size-10 shrink-0 items-center justify-center rounded-lg"
+        className="bg-primary/10 text-primary flex size-10 shrink-0 items-center justify-center rounded-xl"
         layoutId={`icon-${data.id}`}
         layout="position"
       >
@@ -116,7 +109,7 @@ function TransactionItem({
         </div>
       </motion.div>
 
-      <div className="flex flex-1 flex-col justify-center text-xs">
+      <div className="flex min-w-0 flex-1 flex-col justify-center text-xs">
         <motion.p
           className="text-foreground font-semibold"
           layoutId={`name-${data.id}`}
@@ -135,7 +128,7 @@ function TransactionItem({
       </div>
 
       <motion.p
-        className="text-muted-foreground flex items-center text-xs"
+        className="text-foreground flex shrink-0 items-center text-xs font-medium tabular-nums"
         layoutId={`amount-${data.id}`}
         layout="position"
       >
@@ -153,10 +146,10 @@ function TransactionItemExpanded({
   onClose: () => void;
 }) {
   return (
-    <div className="flex w-64 flex-col gap-2">
+    <div className="flex w-full flex-col gap-2">
       <div className="flex justify-between">
         <motion.div
-          className="bg-foreground flex size-10 items-center justify-center rounded-lg"
+          className="bg-primary/10 text-primary flex size-10 items-center justify-center rounded-xl"
           layoutId={`icon-${data.id}`}
           layout="position"
         >

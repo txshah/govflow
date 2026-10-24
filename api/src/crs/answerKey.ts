@@ -2,7 +2,7 @@
  * Identity answer key: who each payee really is in the demo, what they claim, and what CRS + GovFlow should decide.
  *
  * Inputs:
- * - Sandbox personas, seeded state filings
+ * - Sandbox personas, mock business-registry records
  *
  * Outputs:
  * - Array of { id, persona, kind, filing?, expected decision, reasons that must appear }
@@ -16,7 +16,7 @@ import type { StateFiling } from './verify.ts';
 
 const daysAgo = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString().slice(0, 10);
 const filing = (legalName: string, formedOn: string, officers: string[], lastChangedOn?: string): StateFiling => ({
-  source: 'seeded',
+  source: 'mock',
   legalName,
   formedOn,
   officers,
@@ -62,7 +62,8 @@ export const IDENTITY_ANSWER_KEY: IdentityCase[] = [
     filing: filing('KOWALCZYK SUPPLY LLC', daysAgo(30), ['JOHN MERCER'], daysAgo(7)) },
 
   // Person-only checks (signers, wallet-change re-verification).
-  { id: 'wallet-impostor', label: 'Beneficiary-change impostor', persona: 'P12', expected: 'FAIL', mustInclude: ['SSN_NAME_MISMATCH', 'DOB_MISMATCH'] },
+  { id: 'wallet-impostor', label: 'Beneficiary-change impostor', persona: 'P12', expected: 'FAIL',
+    mustInclude: ['SSN_NAME_MISMATCH', 'DOB_MISMATCH', 'FRAUD_SCORE_HIGH:85', 'PHONE_OWNER_MISMATCH'] },
   { id: 'deceased', label: 'Deceased SSN', persona: 'P14', expected: 'FAIL', mustInclude: ['DECEASED_SSN'] },
   { id: 'fraud-alert', label: 'Fraud alert on file: step up, never auto-pass', persona: 'P16', expected: 'REVIEW', mustInclude: ['STEP_UP_REQUIRED'] },
 ];

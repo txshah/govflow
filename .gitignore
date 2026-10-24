@@ -23,3 +23,6 @@ seed/.demo-tokens.json
 
 # Read-only observer login for the flow screen (web/scripts/request-observer.ts)
 seed/.demo-observer.json
+
+# Build caches
+*.tsbuildinfo

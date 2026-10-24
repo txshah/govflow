@@ -35,8 +35,8 @@ export default function CanopyPage() {
         description="Agency → prime → subcontractor. Agents prepare and check each bill, two verified people approve it, and USDC settles in seconds on Base Sepolia."
       />
 
-      <section className="glass relative overflow-hidden rounded-[2.25rem] px-2 pt-6 pb-5 md:px-6">
-        {live.ready ? <Canopy /> : <Skeleton className="mx-auto aspect-[1000/520] w-full rounded-[2rem]" />}
+      <section className="glass relative overflow-hidden rounded-xl px-2 pt-6 pb-5 md:px-6">
+        {live.ready ? <Canopy /> : <Skeleton className="mx-auto aspect-[1000/520] w-full rounded-xl" />}
         <div className="mt-2">
           <CanopyLegend />
         </div>
@@ -44,7 +44,7 @@ export default function CanopyPage() {
 
       <div className="mt-6 flex min-h-12 items-center justify-center gap-3 px-2 text-center text-sm">
         <span className="rounded-full bg-secondary/70 px-2.5 py-0.5 text-[11px] font-medium tracking-wide text-secondary-foreground uppercase">Now</span>
-        <span className="font-display text-base text-foreground/90 md:text-lg">
+        <span className="text-base text-foreground/90 md:text-lg">
           {lines.length ? <Typewriter key={lines[0]} delay={0.2} baseText={lines[0]} texts={lines.slice(1).length ? lines.slice(1) : [lines[0]]} /> : "No activity yet."}
         </span>
       </div>

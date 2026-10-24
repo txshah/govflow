@@ -35,7 +35,7 @@ export function PulseIsland() {
     <MotionConfig transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}>
       <div className="relative">
         <motion.div
-          className="glass absolute top-0 left-1/2 z-40 -translate-x-1/2 overflow-hidden rounded-[1.4rem]"
+          className="glass absolute top-0 left-1/2 z-40 -translate-x-1/2 overflow-hidden rounded-xl"
           animate={{ width: open ? 420 : 300, height: bounds.height || "auto" }}
         >
           <div ref={ref}>

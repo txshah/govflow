@@ -185,7 +185,7 @@ function Pod({ org, live, x }: { org?: Live["organizations"][number]; live: Live
         <span aria-hidden className={cn("absolute -inset-3 -z-10 rounded-full opacity-60 blur-2xl", orgHue[kind]?.soft)} />
         <Icon className={cn("relative size-5", orgHue[kind]?.text)} />
         <span className="relative mt-1 text-[9px] font-medium tracking-wider text-muted-foreground uppercase md:text-[10px]">{kindLabel[kind]}</span>
-        <span className="relative line-clamp-2 font-display text-[11px] leading-tight font-semibold md:text-sm">{titleCase(org.name)}</span>
+        <span className="relative line-clamp-2 text-[11px] leading-tight font-semibold md:text-sm">{titleCase(org.name)}</span>
         <span className="relative mt-1 text-[10px] text-muted-foreground tabular-nums md:text-xs">
           <RollingNumber precision={2} value={Number(amount) / 1e6} format={n => n.toFixed(2)} /> {kind === "AGENCY" ? "paid out" : "received"}
         </span>
@@ -219,7 +219,7 @@ export function Canopy() {
 
 export function CanopyLegend() {
   const items = [
-    { swatch: <span className="size-2.5 rounded-full bg-sun shadow-[0_0_8px] shadow-sun" />, text: "USDC moving" },
+    { swatch: <span className="size-2.5 rounded-full bg-sun" />, text: "USDC moving" },
     { swatch: <span className="size-2.5 rounded-full bg-leaf" />, text: "Paid" },
     { swatch: <span className="size-2.5 rounded-full border-2 border-sun bg-background" />, text: "Billed" },
     { swatch: <span className="size-2.5 rounded-full border border-primary bg-background" />, text: "AI agent" },

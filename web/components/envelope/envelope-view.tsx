@@ -22,7 +22,7 @@ import { VerificationBadge } from "@/components/VerificationBadge"
 import { TxLink } from "@/components/TxLink"
 import { approvalsFor, orgName } from "@/lib/domain"
 import { describeAudit } from "@/lib/describe"
-import { agentLabel, fmtTime, fmtUsdc, freezeReasonLabel, humanize, kindLabel, short, timeAgo, titleCase, actorName } from "@/lib/format"
+import { actorName, agentLabel, crsProducts, crsReason, fmtTime, fmtUsdc, freezeReasonLabel, humanize, kindLabel, short, tidy, timeAgo, titleCase, docNo } from "@/lib/format"
 
 export function EnvelopeView({ invoiceId, focus }: { invoiceId: string; focus?: "case" }) {
   const live = useLive()
@@ -60,6 +60,14 @@ export function EnvelopeView({ invoiceId, focus }: { invoiceId: string; focus?: 
   const caseFiles = findings.filter(f => f.kind === "RISK_CASE")
   const trail = live.audit.filter(e => e.subjectType === "invoice" && e.subjectId === inv.id).sort((a, b) => (a.id > b.id ? 1 : -1))
 
+  // The people's decision on the freeze (unfreeze votes, from whichever round they were cast in).
+  const decisions = live.approvals.filter(a => a.invoiceId === inv.id && a.kind === "UNFREEZE")
+  const decisionText = decisions.some(d => d.vote === "REJECT_CHANGE")
+    ? "Wallet change rejected · paid to the original verified wallet"
+    : decisions.some(d => d.vote === "ACCEPT_CHANGE")
+      ? "Wallet change accepted after the owner proved the new wallet"
+      : "Freeze released by two approvers"
+  const hasCase = changes.length > 0 || caseFiles.length > 0 || inv.state === "PAYMENT_FROZEN"
   const caseSection = (
     <Section title="Fraud case file" description="Why this bill froze and what re-verification showed. Written by the risk agent; decided by people.">
       {changes.length || caseFiles.length || inv.state === "PAYMENT_FROZEN" ? (
@@ -84,20 +92,39 @@ export function EnvelopeView({ invoiceId, focus }: { invoiceId: string; focus?: 
               <p className="mt-2 font-mono text-xs">
                 {short(c.previousWallet, 8, 6)} <ArrowRight className="inline size-3" /> {short(c.requestedWallet, 8, 6)}
               </p>
-              {c.note ? <p className="mt-1 text-muted-foreground">“{c.note}”</p> : null}
+              {c.note ? <p className="mt-1 text-muted-foreground">“{tidy(c.note)}”</p> : null}
               <p className="mt-1 text-xs text-muted-foreground">
                 New wallet proven by its owner: {c.walletProofAt ? `yes, ${timeAgo(c.walletProofAt)}` : "no"}
               </p>
             </div>
           ))}
+          {decisions.length ? (
+            <div className="flex items-start gap-3 rounded-lg bg-success/10 p-3 text-sm">
+              <ShieldCheck className="mt-0.5 size-4 shrink-0 text-success" />
+              <div>
+                <p className="font-medium text-success">{decisionText}</p>
+                <p className="text-muted-foreground">
+                  {decisions.map(d => titleCase(nameOf(d.approver.toHexString()))).join(" and ")} · after the payee re-verified with CRS
+                </p>
+              </div>
+            </div>
+          ) : null}
           {caseFiles.map(f => (
             <div key={String(f.id)} className="rounded-lg border p-3">
               <div className="flex items-center gap-2 text-sm">
                 <span className="font-medium">{agentLabel(f.agentId)}</span>
                 <Pill tone={f.result === "LOW" ? "success" : "danger"}>risk {f.result.toLowerCase()}</Pill>
               </div>
-              <p className="mt-1.5 text-sm whitespace-pre-line text-muted-foreground">{f.body}</p>
-              {f.flags ? <p className="mt-1 text-xs">{f.flags.split(",").map(x => <Pill key={x} tone="danger" className="mr-1">{x}</Pill>)}</p> : null}
+              <p className="mt-1.5 text-sm whitespace-pre-line text-muted-foreground">{tidy(f.body)}</p>
+              {f.flags ? (
+                <p className="mt-2 flex flex-wrap gap-1 text-xs">
+                  {f.flags.split(",").map(x => (
+                    <Pill key={x} tone="danger">
+                      {x.trim().toLowerCase().replaceAll("_", " ")}
+                    </Pill>
+                  ))}
+                </p>
+              ) : null}
             </div>
           ))}
         </div>
@@ -113,7 +140,7 @@ export function EnvelopeView({ invoiceId, focus }: { invoiceId: string; focus?: 
         <ArrowLeft className="size-3" /> {focus === "case" ? "Back to the bill" : "Payment flow"}
       </Link>
       <PageHeader
-        eyebrow={`${kindLabel[inv.kind]} · shared envelope`}
+        eyebrow={`${kindLabel[inv.kind]} · shared by payer and payee`}
         title={
           <span className="flex flex-wrap items-center gap-3">
             {fmtUsdc(inv.amount)} <StatusBadge state={inv.state} />
@@ -121,7 +148,7 @@ export function EnvelopeView({ invoiceId, focus }: { invoiceId: string; focus?: 
         }
         description={
           <>
-            {titleCase(orgName(live, inv.payerOrgId))} pays {titleCase(orgName(live, inv.payeeOrgId))} · bill #{String(inv.id)}
+            {titleCase(orgName(live, inv.payerOrgId))} pays {titleCase(orgName(live, inv.payeeOrgId))} · {docNo(inv)}
             {inv.draftedByAgent ? ` · drafted by ${agentLabel(inv.draftedByAgent)}` : ""}
           </>
         }
@@ -134,7 +161,7 @@ export function EnvelopeView({ invoiceId, focus }: { invoiceId: string; focus?: 
             ) : null}
             <Link
               href={`/verify/${inv.id}`}
-              className="inline-flex h-10 items-center gap-2 rounded-full bg-primary px-4 text-sm font-medium text-primary-foreground shadow-[0_8px_24px_-8px] shadow-primary/60 transition-transform hover:-translate-y-0.5"
+              className="inline-flex h-10 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition-transform hover:-translate-y-0.5"
             >
               <ShieldCheck className="size-4" /> Watch verification
             </Link>
@@ -150,7 +177,7 @@ export function EnvelopeView({ invoiceId, focus }: { invoiceId: string; focus?: 
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-        {focus === "case" ? <div className="lg:col-span-2">{caseSection}</div> : null}
+        {focus === "case" || hasCase ? <div className="lg:col-span-2">{caseSection}</div> : null}
 
         <Section title="What's being billed" description={inv.memo ? `Payee's note: “${inv.memo}”` : undefined}>
           <ul className="divide-y text-sm">
@@ -173,7 +200,13 @@ export function EnvelopeView({ invoiceId, focus }: { invoiceId: string; focus?: 
                 <span className="font-medium">Agent check</span>
                 <Pill tone={inv.matchResult === "MATCHED" ? "success" : inv.matchResult === "UNSURE" ? "warning" : "danger"}>{inv.matchResult.toLowerCase()}</Pill>
               </div>
-              <p className="mt-1 text-sm whitespace-pre-line text-muted-foreground">{inv.matchReasons}</p>
+              <p className="mt-1 text-sm">{inv.matchReasons.split("\n")[0]}</p>
+              {inv.matchReasons.includes("\n") ? (
+                <details className="mt-1 text-sm text-muted-foreground">
+                  <summary className="cursor-pointer text-xs text-primary">Full reasoning</summary>
+                  <p className="mt-1 whitespace-pre-line">{tidy(inv.matchReasons.split("\n").slice(1).join("\n"))}</p>
+                </details>
+              ) : null}
             </div>
           ) : null}
         </Section>
@@ -185,18 +218,35 @@ export function EnvelopeView({ invoiceId, focus }: { invoiceId: string; focus?: 
               {payee ? <VerificationBadge verified={payee.verified} hash={payee.identityHash} decision={checks[0]?.decision} reasons={checks[0]?.reasons} /> : null}
             </div>
             <p className="font-mono text-xs">Pays to {short(inv.beneficiaryWallet, 10, 6)}</p>
-            <ul className="space-y-1.5">
-              {checks.slice(0, 5).map(v => (
-                <li key={String(v.id)} className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <Pill tone={(v.decision ?? (v.passed ? "PASS" : "FAIL")) === "PASS" ? "success" : (v.decision === "REVIEW" ? "warning" : "danger")}>
-                    {(v.decision ?? (v.passed ? "PASS" : "FAIL")).toLowerCase()}
-                  </Pill>
-                  {v.products.replaceAll(",", " · ")}
-                  {v.reasons ? ` · ${v.reasons.replaceAll(",", ", ")}` : ""}
-                  <span className="ml-auto">{timeAgo(v.checkedAt)}</span>
-                </li>
-              ))}
-            </ul>
+            {(() => {
+              const orgChecks = checks.filter(c => c.subjectType === "ORG")
+              const people = checks.filter(c => c.subjectType === "MEMBER" && (c.decision ?? (c.passed ? "PASS" : "FAIL")) === "PASS").length
+              return (
+                <ul className="divide-y rounded-2xl bg-muted/40 text-xs">
+                  {orgChecks.slice(0, 2).map(v => {
+                    const d = v.decision ?? (v.passed ? "PASS" : "FAIL")
+                    return (
+                      <li key={String(v.id)} className="flex items-start gap-3 px-3 py-2.5">
+                        <Pill tone={d === "PASS" ? "success" : d === "REVIEW" ? "warning" : "danger"}>{d.toLowerCase()}</Pill>
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-foreground">{crsProducts(v.products)}</span>
+                          {v.reasons ? <span className="block text-muted-foreground">{v.reasons.split(",").filter(Boolean).map(crsReason).join(" · ")}</span> : null}
+                        </span>
+                        <span className="shrink-0 text-muted-foreground">{timeAgo(v.checkedAt)}</span>
+                      </li>
+                    )
+                  })}
+                  {people ? (
+                    <li className="flex items-center gap-3 px-3 py-2.5">
+                      <Pill tone="success">pass</Pill>
+                      <span className="text-foreground">
+                        {people} {people === 1 ? "person" : "people"} identity-verified
+                      </span>
+                    </li>
+                  ) : null}
+                </ul>
+              )
+            })()}
             <p className="text-xs text-muted-foreground">Payer: {titleCase(payer?.name ?? "")}</p>
           </div>
         </Section>
@@ -216,7 +266,9 @@ export function EnvelopeView({ invoiceId, focus }: { invoiceId: string; focus?: 
           ) : (
             <Empty>No votes this round.</Empty>
           )}
-          {pastVotes.length ? <p className="mt-3 text-xs text-muted-foreground">{pastVotes.length} earlier vote(s) were voided by a freeze or rejection.</p> : null}
+          {pastVotes.filter(v => v.kind === "PAYMENT").length ? (
+            <p className="mt-3 text-xs text-muted-foreground">{pastVotes.filter(v => v.kind === "PAYMENT").length} earlier approval(s) were voided by the freeze, so approval started over.</p>
+          ) : null}
         </Section>
 
         <Section title="Payout" description="Direct USDC transfer from the payer's treasury on Base Sepolia, one idempotency key per payment">
@@ -239,7 +291,7 @@ export function EnvelopeView({ invoiceId, focus }: { invoiceId: string; focus?: 
           )}
         </Section>
 
-        {focus !== "case" ? <div className="lg:col-span-2">{caseSection}</div> : null}
+
 
         <Section title="Audit trail" description="Every step on this bill, oldest first" className="lg:col-span-2">
           {trail.length ? (

@@ -5,11 +5,11 @@
  * - Children pages
  *
  * Outputs:
- * - <html> with fonts (Fraunces display, Geist body/mono), day/night theme, tooltips, toasts, the SpacetimeDB connection and the solarpunk shell
+ * - <html> with fonts (Geist sans and mono), light/dark theme, tooltips, toasts, the SpacetimeDB connection and the solarpunk shell
  */
 
 import type { Metadata } from "next"
-import { Fraunces, Geist, Geist_Mono } from "next/font/google"
+import { Caveat, Geist, Geist_Mono } from "next/font/google"
 import { ThemeProvider } from "next-themes"
 import { Toaster } from "@/components/ui/sonner"
 import { TooltipProvider } from "@/components/ui/tooltip"
@@ -19,7 +19,8 @@ import "./globals.css"
 
 const geist = Geist({ subsets: ["latin"], variable: "--font-sans" })
 const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-geist-mono" })
-const fraunces = Fraunces({ subsets: ["latin"], variable: "--font-display", axes: ["SOFT", "opsz"] })
+// Handwriting for signatures on the mock documents.
+const caveat = Caveat({ subsets: ["latin"], variable: "--font-signature" })
 
 export const metadata: Metadata = {
   title: "GovFlow",
@@ -28,7 +29,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" suppressHydrationWarning className={`${geist.variable} ${geistMono.variable} ${fraunces.variable}`}>
+    <html lang="en" suppressHydrationWarning className={`${geist.variable} ${geistMono.variable} ${caveat.variable}`}>
       <body className="min-h-svh font-sans antialiased">
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false} disableTransitionOnChange>
           <TooltipProvider delayDuration={150}>

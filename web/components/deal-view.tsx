@@ -17,7 +17,7 @@ import { useAct, useLive } from "@/components/app/providers"
 import { PageHeader, Section } from "@/components/app/page-header"
 import { Pill } from "@/components/StatusBadge"
 import { orgName } from "@/lib/domain"
-import { agentLabel, fmtUsdc, kindLabel, timeAgo, titleCase } from "@/lib/format"
+import { agentLabel, fmtUsdc, kindLabel, scopeList, timeAgo, titleCase } from "@/lib/format"
 
 export function DealView() {
   const { dealId } = useParams<{ dealId: string }>()
@@ -34,7 +34,7 @@ export function DealView() {
         eyebrow={kindLabel[contract.kind]}
         title={contract.title}
         description={`${titleCase(orgName(live, contract.payerOrgId))} pays ${titleCase(orgName(live, contract.payeeOrgId))} · ${fmtUsdc(contract.totalValue)}`}
-        actions={<Pill tone={deal.state === "ACTIVE" ? "success" : "warning"}>{deal.state.toLowerCase().replace("_", " ")}</Pill>}
+        meta={<Pill tone={deal.state === "ACTIVE" ? "success" : "warning"}>{deal.state === "ACTIVE" ? "Active · both parties signed" : "Awaiting signatures"}</Pill>}
       />
       <div className="grid gap-6 md:grid-cols-2">
         {parties.map(orgId => {
@@ -42,7 +42,7 @@ export function DealView() {
           const mandates = live.mandates.filter(m => m.dealId === deal.id && m.orgId === orgId && !m.revoked)
           const canSign = !sig && me?.orgId === orgId && me.isSigner && me.verified && deal.state === "AWAITING_SIGNATURES"
           return (
-            <Section key={String(orgId)} title={titleCase(orgName(live, orgId))} description={orgId === contract.payerOrgId ? "Pays" : "Is paid"}>
+            <Section key={String(orgId)} title={titleCase(orgName(live, orgId))} description={orgId === contract.payerOrgId ? "Payer" : "Payee"}>
               <div className="space-y-3 text-sm">
                 <p className="flex items-center gap-2">
                   {sig ? <Check className="size-4 text-success" /> : <Clock className="size-4 text-muted-foreground" />}
@@ -52,8 +52,11 @@ export function DealView() {
                   <div key={String(m.id)} className="rounded-lg bg-muted/60 p-3 text-xs">
                     <p className="font-medium">{agentLabel(m.agentId)} mandate</p>
                     <p className="mt-1 text-muted-foreground">
-                      {m.scope.replaceAll(",", " · ")} · up to {fmtUsdc(m.perCallLimit)} per call, {fmtUsdc(m.sessionLimit)} total · expires{" "}
-                      {new Date(Number(m.expiresAt.microsSinceUnixEpoch / 1000n)).toLocaleDateString()}
+                      {scopeList(m.scope)}
+                    </p>
+                    <p className="mt-0.5 text-muted-foreground">
+                      Up to {fmtUsdc(m.perCallLimit)} per call · {fmtUsdc(m.sessionLimit)} total · expires{" "}
+                      {new Date(Number(m.expiresAt.microsSinceUnixEpoch / 1000n)).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                     </p>
                   </div>
                 ))}

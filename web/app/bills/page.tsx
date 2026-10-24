@@ -1,145 +1,202 @@
 "use client"
 
 /**
- * Bills board: every bill as a card that glides between stage columns live (checking → verifying → approving → paying → paid). Frozen bills move to a row at the top until the payee re-verifies.
+ * Bills: every bill at both levels as a timeline row — when the work was accepted, submitted, checked by the agent, verified by CRS, approved and paid — with how long payment took, set against the ~50-day industry wait. Filter by in progress / frozen / paid; open a bill or watch its verification.
  *
  * Inputs:
- * - Live invoices and approvals for the signed-in persona
+ * - Live invoices, audit events, milestones, verifications for the signed-in persona
  *
  * Outputs:
- * - A stage board; cards open the shared payment envelope
+ * - Speed comparison, filters, and grouped timeline rows
  */
 
 import Link from "next/link"
-import { useRouter } from "next/navigation"
-import { LayoutGroup, motion } from "motion/react"
-import { ShieldCheck, Snowflake } from "lucide-react"
+import { useState } from "react"
+import { motion } from "motion/react"
+import { ArrowUpRight, Check, Clock, ShieldCheck, Snowflake, Zap } from "lucide-react"
 import { useLive, type Live } from "@/components/app/providers"
 import { Empty, PageHeader } from "@/components/app/page-header"
-import { BillStepper } from "@/components/BillStepper"
-import { approvalsFor, orgName } from "@/lib/domain"
-import { fmtUsdc, freezeReasonLabel, kindLabel, timeAgo, titleCase } from "@/lib/format"
+import { StatusBadge } from "@/components/StatusBadge"
+import { billStages, orgName } from "@/lib/domain"
+import { billTimes, fmtDuration, STAGE_LABEL, type StageKey } from "@/lib/bill-timeline"
+import { fmtUsdc, freezeReasonLabel, kindLabel, titleCase, toDate, docNo } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
-const COLUMNS = [
-  { key: "check", title: "Agent checking", states: ["DRAFT", "SUBMITTED"], dot: "bg-sky" },
-  { key: "verify", title: "CRS verifying", states: ["MATCHED"], dot: "bg-lilac" },
-  { key: "approve", title: "Approving", states: ["FINANCE_REVIEW", "APPROVED"], dot: "bg-sun" },
-  { key: "pay", title: "Paying", states: ["PAYMENT_QUEUED"], dot: "bg-clay" },
-  { key: "paid", title: "Paid", states: ["SETTLED"], dot: "bg-leaf" },
-]
+const INDUSTRY_DAYS = 50
+const FILTERS = [
+  { id: "all", label: "All" },
+  { id: "progress", label: "In progress" },
+  { id: "frozen", label: "Frozen" },
+  { id: "paid", label: "Paid" },
+] as const
+type Filter = (typeof FILTERS)[number]["id"]
 
-function BillCard({ inv, live }: { inv: Live["invoices"][number]; live: Live }) {
-  const router = useRouter()
-  const votes = approvalsFor(live, inv).filter(a => a.vote === "APPROVE").length
+const matches = (f: Filter, state: string) =>
+  f === "all" ||
+  (f === "paid" && state === "SETTLED") ||
+  (f === "frozen" && state === "PAYMENT_FROZEN") ||
+  (f === "progress" && !["SETTLED", "PAYMENT_FROZEN", "REJECTED", "FAILED"].includes(state))
+
+const STAGE_KEYS: StageKey[] = ["work", "submitted", "matched", "crs", "approved", "paid"]
+const STAGE_FROM_DOMAIN: Record<string, StageKey> = { work: "work", bill: "submitted", check: "matched", crs: "crs", approve: "approved", paid: "paid" }
+
+function Row({ inv, live }: { inv: Live["invoices"][number]; live: Live }) {
+  const { times, toPaidMs } = billTimes(live, inv)
+  const stages = billStages(live, inv)
+  const status = Object.fromEntries(stages.map(s => [STAGE_FROM_DOMAIN[s.key], s.status]))
   const frozen = inv.state === "PAYMENT_FROZEN"
   return (
-    <motion.div layout layoutId={`bill-${inv.id}`} transition={{ type: "spring", stiffness: 260, damping: 28 }}>
-      <Link
-        href={`/envelope/${inv.id}`}
-        className={cn(
-          "glass block rounded-3xl p-4 transition-transform hover:-translate-y-0.5",
-          frozen && "border-destructive/50 bg-destructive/5"
-        )}
-      >
-        <div className="flex items-start justify-between gap-2">
+    <motion.li layout className="glass grid items-center gap-x-6 gap-y-3 rounded-xl px-5 py-4 lg:grid-cols-[13rem_minmax(0,1fr)_11rem]">
+      <div className="min-w-0">
+        <div className="flex items-center gap-2">
           <span className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
-            {kindLabel[inv.kind]} #{String(inv.id)}
-          </span>
-          <span className="flex items-center gap-2 text-[10px] text-muted-foreground">
-            {timeAgo(inv.submittedAt ?? inv.createdAt)}
-            <span
-              role="link"
-              tabIndex={0}
-              title="Watch verification"
-              onClick={e => {
-                e.preventDefault()
-                router.push(`/verify/${inv.id}`)
-              }}
-              onKeyDown={e => {
-                if (e.key === "Enter") {
-                  e.preventDefault()
-                  router.push(`/verify/${inv.id}`)
-                }
-              }}
-              className="grid size-6 place-items-center rounded-full bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground"
-            >
-              <ShieldCheck className="size-3.5" />
-            </span>
+            {kindLabel[inv.kind]} {docNo(inv)}
           </span>
         </div>
-        <p className="mt-1 font-display text-2xl font-semibold tabular-nums tracking-tight">{fmtUsdc(inv.amount)}</p>
-        <p className="mt-0.5 truncate text-xs text-muted-foreground">
+        <p className="text-2xl font-semibold tabular-nums tracking-tight">{fmtUsdc(inv.amount)}</p>
+        <p className="truncate text-xs text-muted-foreground">
           {titleCase(orgName(live, inv.payerOrgId))} → {titleCase(orgName(live, inv.payeeOrgId))}
         </p>
-        <div className="mt-3">
-          <BillStepper invoice={inv} />
-        </div>
-        {frozen ? (
-          <p className="mt-3 flex items-center gap-1.5 text-xs text-destructive">
+      </div>
+
+      {/* stage timeline with times */}
+      <ol className="relative grid grid-cols-6">
+        <span aria-hidden className="absolute top-3 right-[8%] left-[8%] h-0.5 rounded-full bg-border" />
+        {STAGE_KEYS.map(k => {
+          const st = status[k] ?? "pending"
+          const t = times[k]
+          return (
+            <li key={k} className="relative flex flex-col items-center gap-1 text-center">
+              <span
+                className={cn(
+                  "z-10 grid size-6 place-items-center rounded-full",
+                  st === "done" && "bg-leaf text-background",
+                  st === "current" && "bg-sun",
+                  st === "blocked" && "bg-destructive text-background",
+                  st === "pending" && "border border-border bg-background"
+                )}
+              >
+                {st === "done" ? <Check className="size-3.5" strokeWidth={3} /> : st === "blocked" ? <Snowflake className="size-3.5" /> : null}
+              </span>
+              <span className={cn("text-[11px] font-medium", st === "pending" && "text-muted-foreground")}>{STAGE_LABEL[k]}</span>
+              <span className="text-[10px] text-muted-foreground tabular-nums">
+                {t ? toDate(t).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", second: "2-digit" }) : "—"}
+              </span>
+            </li>
+          )
+        })}
+      </ol>
+
+      <div className="flex items-center justify-between gap-3 lg:flex-col lg:items-end">
+        {inv.state === "SETTLED" && toPaidMs !== undefined ? (
+          <p className="flex items-center gap-1.5 text-sm font-medium text-success">
+            <Zap className="size-4" /> Paid in {fmtDuration(toPaidMs)}
+          </p>
+        ) : frozen ? (
+          <p className="flex items-center gap-1.5 text-xs text-destructive">
             <Snowflake className="size-3.5" />
-            {freezeReasonLabel[inv.freezeReason] ?? inv.freezeReason}
+            {freezeReasonLabel[inv.freezeReason] ?? "Frozen"}
           </p>
-        ) : inv.state === "FINANCE_REVIEW" ? (
-          <p className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground">
-            {[0, 1].map(i => (
-              <span key={i} className={cn("size-2 rounded-full", i < votes ? "bg-leaf" : "bg-border")} />
-            ))}
-            {votes}/2 approvals
-          </p>
-        ) : null}
-      </Link>
-    </motion.div>
+        ) : (
+          <StatusBadge state={inv.state} />
+        )}
+        <div className="flex gap-1.5">
+          <Link href={`/verify/${inv.id}`} className="inline-flex h-8 items-center gap-1 rounded-lg bg-primary/10 px-3 text-xs font-medium text-primary hover:bg-primary hover:text-primary-foreground">
+            <ShieldCheck className="size-3.5" /> Verify
+          </Link>
+          <Link href={frozen ? `/cases/${inv.id}` : `/envelope/${inv.id}`} className="inline-flex h-8 items-center gap-1 rounded-lg bg-muted px-3 text-xs font-medium hover:bg-muted/70">
+            Open <ArrowUpRight className="size-3.5" />
+          </Link>
+        </div>
+      </div>
+    </motion.li>
   )
 }
 
 export default function BillsPage() {
   const live = useLive()
-  const frozen = live.invoices.filter(i => i.state === "PAYMENT_FROZEN")
-  const returned = live.invoices.filter(i => i.state === "REJECTED" || i.state === "FAILED")
+  const [filter, setFilter] = useState<Filter>("all")
+  const paidTimes = live.invoices.map(i => billTimes(live, i).toPaidMs).filter((x): x is number => x !== undefined).sort((a, b) => a - b)
+  const median = paidTimes.length ? paidTimes[Math.floor(paidTimes.length / 2)] : undefined
+  const levels = [
+    { id: "PAY_APPLICATION", title: "Agency → Prime", hint: "Monthly pay applications" },
+    { id: "SUB_INVOICE", title: "Prime → Subcontractor", hint: "Subcontractor invoices" },
+  ]
+  const count = (f: Filter) => live.invoices.filter(i => matches(f, i.state)).length
+  const industryMs = INDUSTRY_DAYS * 86_400_000
+  const ourShare = median ? Math.max(1.2, (median / industryMs) * 100) : 0
+
   return (
     <>
-      <PageHeader eyebrow="Bills" title="Bills board" description="Every bill takes the same path at both levels. Watch them move as agents check, CRS verifies and two people approve." />
-      <LayoutGroup>
-        {frozen.length ? (
-          <section className="mb-6 rounded-[2rem] border border-destructive/30 bg-destructive/[0.06] p-4">
-            <p className="mb-3 flex items-center gap-2 px-1 text-sm font-semibold text-destructive">
-              <Snowflake className="size-4" /> Frozen · {frozen.length} waiting for re-verification
-            </p>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {frozen.map(inv => (
-                <BillCard key={String(inv.id)} inv={inv} live={live} />
-              ))}
+      <PageHeader eyebrow="Bills" title="Bills" description="Every bill, both levels, with the time each step happened." />
+
+      {/* Speed: GovFlow vs the industry */}
+      <section className="glass mb-6 grid gap-5 rounded-xl px-6 py-5 md:grid-cols-[14rem_minmax(0,1fr)]">
+        <div>
+          <p className="text-xs text-muted-foreground">Median time, submitted → paid</p>
+          <p className="text-4xl font-semibold tracking-tight text-success">{median ? fmtDuration(median) : "—"}</p>
+          <p className="text-xs text-muted-foreground">{paidTimes.length} paid bill{paidTimes.length === 1 ? "" : "s"}</p>
+        </div>
+        <div className="flex flex-col justify-center gap-3">
+          <div>
+            <div className="mb-1 flex justify-between text-xs">
+              <span className="font-medium">GovFlow</span>
+              <span className="tabular-nums text-muted-foreground">{median ? fmtDuration(median) : "—"}</span>
             </div>
-          </section>
-        ) : null}
-        {live.invoices.length ? (
-          <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-5">
-            {COLUMNS.map(col => {
-              const bills = live.invoices.filter(i => col.states.includes(i.state)).sort((a, b) => (a.id > b.id ? -1 : 1))
-              return (
-                <div key={col.key} className="min-w-0">
-                  <div className="mb-3 flex items-center justify-between px-2">
-                    <h2 className="flex items-center gap-2 font-display text-base font-semibold">
-                      <span className={cn("size-2 rounded-full", col.dot)} />
-                      {col.title}
-                    </h2>
-                    <span className="grid size-6 place-items-center rounded-full bg-muted text-[11px] tabular-nums">{bills.length}</span>
-                  </div>
-                  <div className="min-h-24 space-y-3 rounded-[1.75rem] bg-muted/30 p-2">
-                    {bills.map(inv => (
-                      <BillCard key={String(inv.id)} inv={inv} live={live} />
-                    ))}
-                  </div>
-                </div>
-              )
-            })}
+            <div className="h-2.5 overflow-hidden rounded-full bg-muted">
+              <motion.div className="h-full rounded-full bg-gradient-to-r from-leaf to-primary" initial={{ width: 0 }} animate={{ width: `${ourShare}%` }} transition={{ type: "spring", stiffness: 60, damping: 18 }} />
+            </div>
           </div>
-        ) : (
-          <Empty>No bills visible to you yet.</Empty>
-        )}
-      </LayoutGroup>
-      {returned.length ? <p className="mt-6 text-center text-xs text-muted-foreground">{returned.length} bill(s) returned or failed. Find them in each room.</p> : null}
+          <div>
+            <div className="mb-1 flex justify-between text-xs">
+              <span className="flex items-center gap-1 font-medium">
+                <Clock className="size-3" /> Typical subcontractor wait
+              </span>
+              <span className="tabular-nums text-muted-foreground">~{INDUSTRY_DAYS} days</span>
+            </div>
+            <div className="h-2.5 overflow-hidden rounded-full bg-muted">
+              <motion.div className="h-full rounded-full bg-clay/70" initial={{ width: 0 }} animate={{ width: "100%" }} transition={{ duration: 1.2, ease: "easeOut" }} />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div className="mb-5 flex flex-wrap gap-1 rounded-full bg-muted/60 p-1 sm:w-fit">
+        {FILTERS.map(f => (
+          <button
+            key={f.id}
+            onClick={() => setFilter(f.id)}
+            className={cn("rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors", filter === f.id ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground")}
+          >
+            {f.label} <span className="ml-1 text-xs tabular-nums text-muted-foreground">{count(f.id)}</span>
+          </button>
+        ))}
+      </div>
+
+      {live.invoices.length ? (
+        <div className="space-y-8">
+          {levels.map(level => {
+            const bills = live.invoices.filter(i => i.kind === level.id && matches(filter, i.state)).sort((a, b) => (a.id > b.id ? -1 : 1))
+            if (!bills.length) return null
+            return (
+              <section key={level.id}>
+                <div className="mb-3 flex items-baseline gap-3 px-1">
+                  <h2 className="text-xl font-semibold">{level.title}</h2>
+                  <span className="text-xs text-muted-foreground">{level.hint}</span>
+                </div>
+                <ul className="space-y-3">
+                  {bills.map(inv => (
+                    <Row key={String(inv.id)} inv={inv} live={live} />
+                  ))}
+                </ul>
+              </section>
+            )
+          })}
+          {!live.invoices.some(i => matches(filter, i.state)) ? <Empty>No bills match this filter.</Empty> : null}
+        </div>
+      ) : (
+        <Empty>No bills visible to you yet.</Empty>
+      )}
     </>
   )
 }

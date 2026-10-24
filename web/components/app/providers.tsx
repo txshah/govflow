@@ -18,6 +18,7 @@ import { SpacetimeDBProvider, useSpacetimeDB, useTable } from "spacetimedb/react
 import { toast } from "sonner"
 import { DbConnection, tables } from "@/lib/module_bindings"
 import { buildConnection, GUEST, safeGet, safeSet, type Persona } from "@/lib/spacetime"
+import { readUrlFlags } from "@/lib/url-flags"
 
 type PersonaCtx = { personas: Persona[]; persona: Persona; setPersona: (key: string) => void; loaded: boolean }
 const PersonaContext = createContext<PersonaCtx | null>(null)
@@ -41,7 +42,9 @@ export function Providers({ children }: { children: ReactNode }) {
       .then((list: Persona[]) => {
         if (cancelled) return
         setPersonas(list)
-        const saved = safeGet("govflow.persona")
+        // ?as= wins (Live screen panes), then the saved choice, then the observer.
+        const forced = readUrlFlags().as
+        const saved = forced ?? safeGet("govflow.persona")
         const pick = list.find(p => p.key === saved) ?? list.find(p => p.observer) ?? list[0]
         setKey(pick?.key ?? "guest")
         setLoaded(true)
@@ -53,7 +56,8 @@ export function Providers({ children }: { children: ReactNode }) {
 
   const persona = personas.find(p => p.key === key) ?? GUEST
   const setPersona = useCallback((k: string) => {
-    safeSet("govflow.persona", k)
+    // A pane pinned with ?as= shouldn't change the person saved for the main window.
+    if (!readUrlFlags().as) safeSet("govflow.persona", k)
     setKey(k)
   }, [])
 
