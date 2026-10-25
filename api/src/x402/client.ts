@@ -74,8 +74,9 @@ export async function createAgentPayer() {
         receipt = { idempotencyKey, transaction: settle.transaction, network: settle.network, payer: settle.payer };
       }
     }
-    // TODO: recordX402Receipt reducer once the SpacetimeDB service connection is wired.
-    return { status: res.status, body: (await res.json()) as T, receipt };
+    // No settlement means nothing was charged, so the same key may be tried again.
+    if (!receipt) usedKeys.delete(idempotencyKey);
+    return { status: res.status, body: (await res.json().catch(() => ({}))) as T, receipt };
   }
 
   return { address: account.address, payAndPost };

@@ -6,35 +6,51 @@ CRS. Claude agents check every bill, and two verified people approve every payme
 
 Hackathon build. Testnet only, CRS sandbox personas only. Full spec in `PROJECT.md`, hack plan and disclosures in `HACK.md`.
 
+![Live: selecting the contractor after CRS screening](docs/live.jpg)
+
 ## The demo flow (`/live`)
 
 The Live page tells the story from the city's point of view. The city's steps are buttons; everyone else's steps run by
-themselves in pop-up windows, with a mock document for each stage.
+themselves in pop-up windows, with a document for each stage (every one downloadable).
 
-1. **Post the project.** The city and everyone who will sign or approve are already CRS-verified.
-2. **CRS screens every applicant.** Identity, credit, liens and judgments, sanctions, fraud signals, business registry.
-3. **Select the contractor.** Two verified bids are compared side by side; trying an applicant that failed CRS is blocked,
-   with the reasons shown.
+1. **Post the project.** Fill out the request for bids, or upload an RFP and Claude fills the form in
+   (`web/public/samples/oakridge-rfp.pdf` is a ready-made one), then view the generated document. The city and
+   everyone who will sign or approve are already CRS-verified. Posting saves the project to Open tenders.
+2. **CRS screens every applicant:** identity, business credit, liens and judgments, sanctions, fraud signals, registry.
+   Each applicant in the screening report opens to show every check, what it asked, its source and why it failed.
+3. **Select the contractor.** Any applicant can be clicked; failed, flagged or record-carrying ones are refused with
+   their reasons, and only the clean one can be selected.
 4. **Okafor Builders' six pre-award checks** come back clean and are stored as an attestation hash, never raw data.
 5. **The agents settle the offer:** the city's agent and Okafor's agent exchange the offer, schedule of values and
    insurance certificate (scripted messages, downloadable files).
-6. **Issue, sign and countersign** the contract; each side mandates its AI agent with a scope and budget.
+6. **Issue, sign and countersign** the contract with the details from step 1; each side mandates its AI agent with a
+   scope and budget.
 7. **Proof of work → inspection → pay application.**
 8. **Claude checks the bill** against the contract and accepted work (overbilling, unaccepted or double-billed work,
    prompt injection in the memo). It can flag, never approve or pay.
 9. **Paid CRS check on the payee:** the agent pays 0.01 USDC over x402 for a fresh check, and its identity hash must
    match the one stored at award. A different person behind the business freezes the bill until two approvers accept
-   the change with a reason.
-10. **Optional fraud beat:** an impostor emails a new wallet. Logging it freezes the bill, the agent re-verifies the payee
-   and checks the sender, writes a case file, and two approvers reject the change.
-11. **Two approvals → USDC settles** on the payee's verified wallet.
-12. **The same rules one level down:** prime → subcontractor.
+   the change with a reason. If a fresh paid check can't run (spend cap, CRS down, 25 s timeout), the agent reuses the
+   payee's latest CRS result, clearly labelled, with no new charge.
+10. **Optional fraud beat:** an impostor emails a new wallet (red flags called out on the email). Logging it freezes the
+    bill, the agent re-verifies the payee and checks the sender, writes a case file, and both approvers reject the change.
+11. **Both approvers sign off** in one window, then **USDC settles** on the payee's verified wallet. The receipt is
+    verified: confirmed onchain, right amount, verified wallet, payer's treasury, both ledgers.
+12. **The same rules one level down:** prime → subcontractor, with the sub's progress package (daily report, materials
+    receipt, inspection) behind its invoice.
 13. **Finale:** the bridge before and after, on time, in budget, no fraud.
 
-`/tenders` is the city's open-tender board: how long each tender has been open, downloadable bid packages, applications
-with their CRS results, and a document upload where Claude extracts the company and its people and GovFlow checks them
-against CRS. `/story` tells the same journey as slides. Other pages show each room, the shared envelope, the ledger, audit log,
-agent activity and the vendor answer key.
+## Pages
+
+The top bar has five tabs; everything else (payment flow, envelope, ledger, audit, vendor checks) is in ⌘K.
+
+| Tab | What it shows |
+|---|---|
+| Live | The run above. It remembers where you are, so you can switch tabs mid-demo and come back. |
+| Open tenders | Every open tender and how long it has been open, downloadable bid packages, and each applicant's CRS result. Projects posted from Live appear here with their status. |
+| Bills | Every bill's timeline, from submission to payout. |
+| Rooms | One room per organization: City of Oakridge, Okafor Builders, Nakamura Electric. |
+| Story | Slides: the problem (a real $2.5M contractor-impersonation loss), the solution, then the journey. Can also drive a live run. |
 
 ## Architecture
 
@@ -42,7 +58,7 @@ agent activity and the vendor answer key.
 flowchart LR
     B[Browser: Next.js] <-- subscriptions + reducers --> S[(SpacetimeDB on Maincloud)]
     A[Node API: agents, x402 seller, payouts] <-- subscriptions + service reducers --> S
-    A -->|Claude API| C[Claude: bill match, fraud case file]
+    A -->|Claude API| C[Claude: bill match, fraud case file, RFP extraction]
     A -->|x402 0.01 USDC| X[Verification endpoint] --> R[CRS sandbox]
     A -->|USDC transfer| W[CDP wallets, Base Sepolia]
 ```
@@ -69,6 +85,7 @@ cd web && npm install && npx next dev -p 3100
 ```
 
 - **Payouts:** `PAYOUT_ADAPTER=cdp` sends real Base Sepolia transfers (a few seconds to confirm); `simulated` is instant.
+- **Document upload:** the API serves `POST /api/extract` on port 4021 for the web app (`NEXT_PUBLIC_API_URL` to change it).
 - **Demo logins:** `seed/.demo-tokens.json` and `seed/.demo-observer.json` (gitignored), served by the dev-only
   `/api/personas` route. The app opens as the read-only observer; Live acts for each person behind the scenes.
 - **Reseeding:** `spacetime publish --delete-data` wipes the shared database, then `cd api && npm run seed`, then
@@ -82,3 +99,6 @@ cd web && npm install && npx next dev -p 3100
 - CRS sandbox personas only; all identity data is fake. The business registry check is a labelled mock.
 - Test USDC on Base Sepolia only, tiny amounts, capped at 1.00 USDC per payout.
 - The fraud email is seeded; contractor bidding is simulated, though each screening result is a real CRS sandbox check.
+- Scripted for the demo: the agent-to-agent offer chat, the other open tenders, and the offer, insurance, progress and
+  materials-receipt documents. Claude is live for bill matching, fraud case files and RFP extraction.
+- Posted tenders and Live's progress are saved in the browser (localStorage), not the shared database.

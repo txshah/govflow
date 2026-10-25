@@ -504,6 +504,11 @@ export function StepWindows({
                 {v.products.includes(c.product) ? "✓" : "·"} {c.label.toLowerCase()} · {c.source}
               </Line>
             ))}
+            {v.products.includes("reused_result") ? (
+              <Line d={1.9} tone="dim">
+                ↻ fresh check unavailable: reused this payee&apos;s latest CRS result (no new charge)
+              </Line>
+            ) : null}
             <Line d={2} tone="ok">
               200 OK · attestation {short(v.identityHash, 6, 4)}
             </Line>

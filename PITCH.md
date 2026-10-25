@@ -13,35 +13,42 @@
 | Tech answers | _TBD_ |
 | Backup (video, hotspot, timer) | _TBD_ |
 
-## Full script (2:00)
+## Full script (about 2:30)
 
-**Open (0:00–0:15)**
-> "Cities lose six-figure sums to one email: 'Hi, we changed our bank details.' The next payment goes to the impostor. GovFlow makes that email worthless. Here it is, live."
+The script now runs about 2:30. If the slot is strictly 2:00, cut the stats line in the problem and the "same rules one level down" line.
 
-**Demo (0:15–1:25).** The driver is already on `/live`, and the project is already posted.
+**Problem: story slide 1 (0:00–0:25)**
+> "In 2018, Cabarrus County, North Carolina, got an email from 'its contractor' building a new high school. It had a signed form and a bank letter asking to update the bank details. Staff made the change, and the county sent $2.5 million to scammers. Nobody noticed until the real contractor called about a missed payment. $1.7 million was never recovered."
 
-> "The city posts a bridge repair. Before anyone can win it, CRS screens every applicant: identity, credit, liens, and fraud signals." *(Driver tries to select the failed applicant.)* "This one failed, so the database itself blocks the award, and here's why."
+> "That isn't rare. Business email compromise cost $2.77 billion in 2024 (FBI IC3 report). And the honest side is broken too: 82% of contractors wait more than 30 days to get paid (Rabbet, 2024). Tenders sit on portals, bids arrive by email, bank details live in spreadsheets, and there's no single place to verify who you're paying."
 
-> "Okafor Builders wins. They finish the first milestone, the inspector accepts it, and they send a pay application. Claude reads it against the contract and the accepted work and says MATCHED. Claude can flag a bill, but it can never approve or pay one."
+**Solution: story slide 2 (0:25–0:40)**
+> "GovFlow makes public payments secure and seamless. Secure: every company and person is verified with CRS before award and re-checked before every payment. Money only goes to the wallet tied to the verified owner, and two people approve every payment, never an AI. Seamless: one place for every tender, bid and bill, and contractors are paid in USDC minutes after work is approved, not months later. Let me show you."
 
-> "Before money moves, the city's agent pays one cent in test USDC over x402 for a fresh CRS check on the payee, and the result must match the identity recorded at award."
+**Demo (0:40–1:55).** The driver switches to `/live`, where the project is already posted. Name each sponsor at the moment it does something.
 
-> *(Driver triggers the impostor email.)* "Now the fraud. An email claims to be Okafor and asks for a new wallet. The bill freezes instantly. The agent re-checks the payee and the sender with CRS, and Claude writes a case file: high risk, unverified channel, the sender's identity failed. Two approvers reject the change."
+> "The city posts a bridge repair. Before anyone can win it, **CRS** screens every applicant: TransUnion identity, credit, PitchPoint liens and judgments, and Fraud Finder." *(Driver tries to select the failed applicant.)* "This one failed CRS, so **SpacetimeDB** itself refuses the award. That rule lives in the database, not the UI."
 
-> "Two approvals, and USDC settles on Base Sepolia to the verified wallet. The impostor got nothing. And the same rules run one level down, from prime to subcontractor."
+> "Okafor Builders wins. Every screen updates live, because the city, the prime, the sub and the inspector are all subscribed to the same **SpacetimeDB** rows. Okafor finishes a milestone, the inspector accepts it, and they send a pay application. **Claude** reads it against the contract and the accepted work and returns MATCHED, with reasons. Claude can flag a bill, but it can never approve or pay one."
+
+> "Before money moves, the city's agent buys a fresh CRS check on the payee, and it pays for it with one cent of USDC over **x402**. Its **Coinbase CDP** wallet is locked down: one cent per call, ten cents a day, one allowed payee, testnet only. The result must match the identity recorded at award."
+
+> *(Driver triggers the impostor email.)* "Now the Cabarrus attack. An email claims to be Okafor and asks for a new wallet. The bill freezes instantly. The agent re-checks the payee and the sender with **CRS**, and **Claude** writes a case file: high risk, unverified channel, the sender's identity failed. Two approvers reject the change."
+
+> "Two approvals, and **Coinbase CDP** sends USDC on Base Sepolia to the verified wallet, in seconds. The impostor got nothing. The same rules run one level down, from prime to subcontractor."
 
 **Honesty line (say it during the demo):**
 > "Everything here is sandbox: CRS test personas, test USDC on Base Sepolia, and a mock business registry, because CRS doesn't offer one."
 
-**Tech (1:25–1:45)**
-> "The rules don't live in the AI. They live in SpacetimeDB reducers: roles, freezes, two-person approval and spend caps. Our API is just a service identity. It does the outside work with Claude, CRS, x402 and Coinbase, then writes back, and the database re-checks every rule. So even a fully compromised agent can't pay an impostor."
+**Tech (1:55–2:15)**
+> "Four sponsors, four jobs. **CRS** answers 'who is this?' **Claude** answers 'is this bill right?' **x402 and Coinbase** move the money, whether it's a cent for a check or a payout. And **SpacetimeDB** is the referee: roles, freezes, two-person approval and spend caps are all reducers. Our API is just a service identity. It does the outside work and writes back, and the database re-checks every rule. So even a fully compromised agent can't pay an impostor."
 
-**Impact (1:45–2:00)**
-> "Every party verified, every bill checked, every wallet change frozen until people decide. Next: Claude vision on evidence photos and real registry data. Thank you."
+**Impact (2:15–2:30)**
+> "Cabarrus would have kept its $2.5 million: the email would have frozen the bill, not paid it. Every party verified, every bill checked, contractors paid in minutes. Next: Claude vision on evidence photos and real registry data. Thank you."
 
 ## 30-second version (for a judge who arrives late)
 
-> "GovFlow stops payment-redirection fraud on public contracts. Watch." *(Show the frozen bill and the case file.)* "An impostor emailed a new wallet. The bill froze, CRS re-checked the payee and the sender, and Claude wrote this case file. Two people rejected it." *(Show SETTLED.)* "The real contractor got paid in USDC on Base Sepolia. The agent can't approve or pay, because the database enforces it."
+> "One fake 'new bank details' email cost Cabarrus County $2.5 million. GovFlow stops that on public contracts. Watch." *(Show the frozen bill and the case file.)* "An impostor emailed a new wallet. The bill froze, CRS re-checked the payee and the sender, and Claude wrote this case file. Two people rejected it." *(Show SETTLED.)* "The real contractor got paid in USDC on Base Sepolia. The agent can't approve or pay, because the database enforces it."
 
 ## Q&A
 

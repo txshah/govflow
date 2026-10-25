@@ -16,17 +16,24 @@ import type { Attestation } from '../crs/attestation.ts';
 import type { DbConnection } from '../module_bindings/index.ts';
 import { recordVerification } from '../stdb.ts';
 import { VERIFICATION_URL } from './allowlist.ts';
-import type { createAgentPayer } from './client.ts';
+import type { createAgentPayer, PaidResult } from './client.ts';
 import type { VerificationResult } from './server.ts';
 
 type AgentPayer = Awaited<ReturnType<typeof createAgentPayer>>;
 
 const SCOPE = 'verify';
+const MAX_ATTEMPTS = 3;
+const RETRY_MS = 5_000;
+
+// The check failed before any payment settled, so it can run again.
+class RetryableError extends Error {}
 
 export function createPayeeCheckService(conn: DbConnection, payer: AgentPayer) {
   const db = conn.db;
   const busy = new Set<string>();
   const skipped = new Set<string>();
+  const attempts = new Map<string, number>();
+  const retryAt = new Map<string, number>();
 
   const min = (a: bigint, b: bigint) => (a < b ? a : b);
 
@@ -62,21 +69,57 @@ export function createPayeeCheckService(conn: DbConnection, payer: AgentPayer) {
     const log = (step: string, status: string, detail: string) =>
       conn.reducers.logAgentAction({ agentId: m.agentId, dealId: deal.id, orgId: inv.payerOrgId, scope: SCOPE, step, status, detail });
 
+    // Demo fallback when a fresh paid check can't run (spend cap, CRS down): reuse this payee's latest passing CRS
+    // result from an earlier run, labelled as reused, with no new charge.
+    const reuse = async (why: string) => {
+      const prev = [...db.myVerification.iter()]
+        .filter((v) => v.orgId === inv.payeeOrgId && v.subjectType === 'ORG' && v.passed && v.identityHash)
+        .sort((a, b) => (a.checkedAt.microsSinceUnixEpoch > b.checkedAt.microsSinceUnixEpoch ? -1 : 1))[0];
+      if (!prev) {
+        await log('payee_check', 'failed', `${why}; no earlier CRS result to reuse`);
+        return skip(key, why);
+      }
+      const a: Attestation = {
+        subjectId: `org:${inv.payeeOrgId}`,
+        products: [...prev.products.split(',').map((p) => p.trim()).filter(Boolean), 'reused_result'],
+        decision: 'PASS',
+        passed: true,
+        reasons: prev.reasons.split(',').filter(Boolean),
+        checkedAt: new Date().toISOString(),
+        identityHash: prev.identityHash,
+        requestIds: [],
+        sandbox: true,
+      };
+      await recordVerification(conn, { subjectType: 'ORG', orgId: inv.payeeOrgId, invoiceId: inv.id }, a);
+      const when = new Date(Number(prev.checkedAt.microsSinceUnixEpoch / 1000n)).toLocaleString('en-US');
+      await log('payee_check', 'done', `PASS · reused the CRS result from ${when} (${why}); no new x402 charge`);
+      console.log(`payee check ${key}: reused CRS result from ${when} (${why})`);
+    };
+
     const amount = min(MAX_PER_CALL_ATOMIC, m.perCallLimit);
     if (m.spent + amount > min(m.sessionLimit, MAX_PER_SESSION_ATOMIC)) {
       await log('payee_check', 'blocked', `spend cap reached (${m.spent} of ${m.sessionLimit} micro-USDC)`);
-      return skip(key, 'mandate spend cap reached');
+      return reuse('agent spend cap reached');
     }
+    if ((attempts.get(key) ?? 0) >= MAX_ATTEMPTS - 1) return reuse('CRS check unavailable after retries');
 
     await log('payee_check', 'started', `paying 0.01 test USDC to verify the payee of bill ${inv.id}`);
-    const { status, body, receipt } = await payer.payAndPost<VerificationResult>(
-      VERIFICATION_URL,
-      { invoiceId: String(inv.id) },
-      key
-    );
+    let paid: PaidResult<VerificationResult>;
+    try {
+      // A hung CRS or facilitator call must not stall the demo: give up after 25 s and fall back.
+      paid = await Promise.race([
+        payer.payAndPost<VerificationResult>(VERIFICATION_URL, { invoiceId: String(inv.id) }, key),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timed out after 25 s')), 25_000)),
+      ]);
+    } catch (e) {
+      // The x402 client refused to pay (daily spend limit) or the request never completed.
+      return reuse(`payment not made: ${e instanceof Error ? e.message.slice(0, 80) : 'error'}`);
+    }
+    const { status, body, receipt } = paid;
     if (status !== 200 || !receipt) {
-      await log('payee_check', 'failed', `verification endpoint returned ${status}`);
-      throw new Error(`verification endpoint returned ${status} without a receipt`);
+      // x402 settles only after a successful response, so nothing was charged: safe to try again.
+      await log('payee_check', 'failed', `verification endpoint returned ${status}; retrying`);
+      throw new RetryableError(`verification endpoint returned ${status} without a receipt`);
     }
 
     await conn.reducers.recordX402Receipt({
@@ -113,12 +156,16 @@ export function createPayeeCheckService(conn: DbConnection, payer: AgentPayer) {
       if (inv.state !== 'MATCHED') continue;
       const key = `verify-${inv.id}-${inv.approvalRound}`;
       if (busy.has(key) || skipped.has(key)) continue;
+      if ((retryAt.get(key) ?? 0) > Date.now()) continue;
       busy.add(key);
       check(inv.id, key)
         .catch((e) => {
-          // A failed check is not retried automatically: the charge may already have gone through.
-          skipped.add(key);
-          console.error(`payee check ${key} failed:`, e instanceof Error ? e.message : e);
+          const n = (attempts.get(key) ?? 0) + 1;
+          attempts.set(key, n);
+          console.error(`payee check ${key} failed (attempt ${n}):`, e instanceof Error ? e.message : e);
+          // Retry only when nothing was charged; otherwise (or after MAX_ATTEMPTS) it needs a manual re-check.
+          if (e instanceof RetryableError && n < MAX_ATTEMPTS) retryAt.set(key, Date.now() + RETRY_MS);
+          else skipped.add(key);
         })
         .finally(() => busy.delete(key));
     }
