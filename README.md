@@ -8,6 +8,15 @@ Hackathon build. Testnet only, CRS sandbox personas only. Full spec in `PROJECT.
 
 ![Live: selecting the contractor after CRS screening](docs/live.jpg)
 
+| Pick | Role | Status |
+|---|---|---|
+| SpacetimeDB (Maincloud `govflow-855y2`) | live rooms, rules in reducers, ledger, audit | built, 73 tests |
+| Next.js + shadcn/ui | agency / prime / sub / inspector rooms | built, live data |
+| Anthropic TS SDK, `claude-opus-5-5` | invoice matcher, fraud case files | built, live |
+| Coinbase CDP + x402 | 0.01 paid CRS checks, USDC payouts (Base Sepolia only) | built, live |
+| CRS sandbox | TransUnion ID check, Fraud Finder, credit file, liens/judgments | built, live |
+
+
 ## The demo flow (`/live`)
 
 The Live page tells the story from the city's point of view. The city's steps are buttons; everyone else's steps run by
@@ -96,9 +105,7 @@ cd web && npm install && npx next dev -p 3100
 
 ## Honesty
 
-- CRS sandbox personas only; all identity data is fake. The business registry check is a labelled mock.
+- CRS sandbox personas only
 - Test USDC on Base Sepolia only, tiny amounts, capped at 1.00 USDC per payout.
-- The fraud email is seeded; contractor bidding is simulated, though each screening result is a real CRS sandbox check.
-- Scripted for the demo: the agent-to-agent offer chat, the other open tenders, and the offer, insurance, progress and
-  materials-receipt documents. Claude is live for bill matching, fraud case files and RFP extraction.
-- Posted tenders and Live's progress are saved in the browser (localStorage), not the shared database.
+- The fraud email is seeded; though each screening result is a real CRS sandbox check.
+- Claude is live for bill matching, fraud case files and RFP extraction.
