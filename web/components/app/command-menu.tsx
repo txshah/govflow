@@ -12,7 +12,7 @@
 
 import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
-import { BookOpenCheck, Building2, Eye, HardHat, Landmark, MonitorPlay, Play, Receipt, Search, ShieldCheck, User, Waypoints } from "lucide-react"
+import { BookOpenCheck, Building2, Eye, HardHat, Landmark, Gavel, MonitorPlay, Play, Receipt, Search, ShieldCheck, User, Waypoints } from "lucide-react"
 import { Command, CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from "@/components/ui/command"
 import { Kbd } from "@/components/ui/kbd"
 import { useLive, usePersonas } from "@/components/app/providers"
@@ -21,6 +21,7 @@ import { fmtUsdc, kindLabel, titleCase, docNo } from "@/lib/format"
 
 const PAGES = [
   { label: "Payment flow", href: "/", icon: Waypoints },
+  { label: "Open tenders", href: "/tenders", icon: Gavel },
   { label: "Live · run it step by step", href: "/live", icon: MonitorPlay },
   { label: "Bills", href: "/bills", icon: Receipt },
   { label: "Agency room", href: "/agency", icon: Landmark },

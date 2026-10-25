@@ -11,11 +11,11 @@
  */
 
 import { motion } from "motion/react"
-import { Check, ShieldAlert } from "lucide-react"
-import type { ReactNode } from "react"
+import { Check, ChevronRight, FileUp, Loader2, ShieldAlert } from "lucide-react"
+import { useState, type ReactNode } from "react"
 import type { Live } from "@/components/app/providers"
 import type { LiveStep } from "@/lib/live-steps"
-import { IMPOSTOR_WALLET, projectParts } from "@/lib/live-steps"
+import { briefAtomic, DEFAULT_BRIEF, IMPOSTOR_WALLET, projectParts, type ProjectBrief } from "@/lib/live-steps"
 import { CRS_CHECKS } from "@/lib/verification-graph"
 import { contractNo, crsReason, docNo, fmtUsdc, short, titleCase, toDate } from "@/lib/format"
 import { cn } from "@/lib/utils"
@@ -143,7 +143,133 @@ function ContractDoc({ live, x, sub, nameOf }: { live: Live; x: Parts; sub: bool
 }
 
 // The contract about to be issued, before it exists in the database.
-function DraftContract({ live, sub }: { live: Live; sub: boolean }) {
+// The request for bids the city is about to post, filled from the form (or an uploaded document).
+function BriefDoc({ live, brief }: { live: Live; brief: ProjectBrief }) {
+  const agency = live.organizations.find(o => o.kind === "AGENCY")
+  return (
+    <Paper letterhead={agency ? titleCase(agency.name) : "City of Oakridge"} kind="Request for bids · draft">
+      <div className="grid grid-cols-3 gap-3">
+        <Field label="Project" value={brief.title || "—"} />
+        <Field label="Budget" value={fmtUsdc(briefAtomic(brief))} />
+        <Field label="Complete by" value={brief.finish || "—"} />
+      </div>
+      <div className="mt-3 space-y-2 text-neutral-700">
+        <Field label="Location" value={brief.location || "—"} />
+        <div>
+          <p className="text-[10px] tracking-wide text-neutral-500 uppercase">Scope of work</p>
+          <p className="text-[13px] text-neutral-800">{brief.scope || "—"}</p>
+        </div>
+      </div>
+      <table className="mt-3 w-full text-left text-[12px]">
+        <tbody>
+          <tr className="border-y border-neutral-200">
+            <td className="py-1.5">1</td>
+            <td>{brief.line || "—"}</td>
+            <td className="text-right tabular-nums">{fmtUsdc(briefAtomic(brief))}</td>
+          </tr>
+        </tbody>
+      </table>
+      <p className="mt-3 text-[11px] text-neutral-500">
+        Bidders must pass CRS screening before award. Progress billing only on inspected, accepted work; payment to the verified owner&apos;s wallet after two approvals.
+      </p>
+    </Paper>
+  )
+}
+
+const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4021"
+
+// New project: fill out the request for bids (or let Claude fill it from an uploaded RFP), then view the generated document.
+function BriefEditor({ live, brief, setBrief }: { live: Live; brief: ProjectBrief; setBrief: (b: ProjectBrief) => void }) {
+  const [tab, setTab] = useState<"fill" | "view">("fill")
+  const [busy, setBusy] = useState<string | null>(null)
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
+
+  const extract = async (name: string, mediaType: string, data: string) => {
+    setBusy(name)
+    setMsg(null)
+    try {
+      const res = await fetch(`${API}/api/extract`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ kind: "project", name, mediaType, data }) })
+      const out = await res.json()
+      if (!res.ok) throw new Error(out.error ?? `Extraction failed (${res.status})`)
+      setBrief({ title: out.title || brief.title, location: out.location || brief.location, scope: out.scope || brief.scope, line: out.lineDescription || brief.line, amount: out.amountUsdc || brief.amount, finish: out.finish || brief.finish })
+      setMsg({ ok: true, text: `Claude filled the form from ${name}` })
+      setTab("view")
+    } catch (e) {
+      setMsg({ ok: false, text: e instanceof TypeError ? "Can't reach the GovFlow API. Start it with: cd api && npm start" : e instanceof Error ? e.message : String(e) })
+    } finally {
+      setBusy(null)
+    }
+  }
+  const toBase64 = (blob: Blob) =>
+    new Promise<string>((resolve, reject) => {
+      const r = new FileReader()
+      r.onload = () => resolve(String(r.result).split(",")[1] ?? "")
+      r.onerror = () => reject(r.error)
+      r.readAsDataURL(blob)
+    })
+  const useSample = async () => extract("RFB-2026-114.pdf", "application/pdf", await toBase64(await (await fetch("/samples/oakridge-rfp.pdf")).blob()))
+  const onFile = async (f?: File) => f && extract(f.name, f.type || "application/pdf", await toBase64(f))
+
+  const input = "mt-1 w-full rounded-sm border border-neutral-300 bg-white px-2.5 py-1.5 text-[13px] text-neutral-900 outline-none focus:border-neutral-600"
+  const field = (k: keyof ProjectBrief, label: string, wide = false) => (
+    <label key={k} className={cn("block", wide && "col-span-2")}>
+      <span className="text-[10px] tracking-wide text-neutral-500 uppercase">{label}</span>
+      {k === "scope" ? (
+        <textarea rows={3} value={brief[k]} onChange={e => setBrief({ ...brief, [k]: e.target.value })} className={input} />
+      ) : (
+        <input value={brief[k]} onChange={e => setBrief({ ...brief, [k]: e.target.value })} className={input} />
+      )}
+    </label>
+  )
+
+  return (
+    <div className="mx-auto w-full max-w-[34rem]">
+      <div className="mb-2 flex items-center gap-1 rounded-lg bg-muted p-1 text-sm">
+        {(["fill", "view"] as const).map(t => (
+          <button key={t} onClick={() => setTab(t)} className={cn("flex-1 rounded-md px-3 py-1.5 font-medium", tab === t ? "bg-background shadow-sm" : "text-muted-foreground")}>
+            {t === "fill" ? "Fill out" : "View document"}
+          </button>
+        ))}
+      </div>
+      {tab === "view" ? (
+        <BriefDoc live={live} brief={brief} />
+      ) : (
+        <Paper letterhead="City of Oakridge · Public Works" kind="New project · request for bids">
+          <div className="rounded-sm border border-dashed border-neutral-300 bg-neutral-50 p-3">
+            <p className="text-[12px] font-medium text-neutral-800">Have the RFP already? Upload it and Claude fills this in.</p>
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-[12px]">
+              <button onClick={useSample} disabled={!!busy} className="inline-flex items-center gap-1.5 rounded-sm bg-neutral-900 px-2.5 py-1.5 font-medium text-white disabled:opacity-60">
+                {busy ? <Loader2 className="size-3.5 animate-spin" /> : <FileUp className="size-3.5" />} Upload RFB-2026-114.pdf
+              </button>
+              <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-sm border border-neutral-300 bg-white px-2.5 py-1.5">
+                Choose a file…
+                <input type="file" accept=".pdf,.txt" className="hidden" onChange={e => onFile(e.target.files?.[0])} />
+              </label>
+              <a href="/samples/oakridge-rfp.pdf" download="RFB-2026-114.pdf" className="text-blue-800 underline">
+                Download sample RFP
+              </a>
+            </div>
+            {busy ? <p className="mt-2 text-[11px] text-neutral-500">Claude is reading {busy}…</p> : null}
+            {msg ? <p className={cn("mt-2 text-[11px]", msg.ok ? "text-green-800" : "text-red-700")}>{msg.text}</p> : null}
+          </div>
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            {field("title", "Project title", true)}
+            {field("location", "Location", true)}
+            {field("scope", "Scope of work", true)}
+            {field("line", "Contract line 1", true)}
+            {field("amount", "Budget (USDC, 0.05–0.50)")}
+            {field("finish", "Required completion")}
+          </div>
+          <button onClick={() => setTab("view")} className="mt-4 text-[12px] text-blue-800 underline">
+            View the generated request for bids →
+          </button>
+        </Paper>
+      )}
+    </div>
+  )
+}
+
+function DraftContract({ live, sub, brief = DEFAULT_BRIEF }: { live: Live; sub: boolean; brief?: ProjectBrief }) {
   const now = useNow(60_000) // 0 while prerendering, real time in the browser
   const agency = live.organizations.find(o => o.kind === "AGENCY")
   const prime = live.organizations.find(o => o.kind === "PRIME")
@@ -155,17 +281,17 @@ function DraftContract({ live, sub }: { live: Live; sub: boolean }) {
       <div className="grid grid-cols-3 gap-3">
         <Field label="Contract no." value="pending" />
         <Field label="Date" value={now ? fmtDate(new Date(now)) : "—"} />
-        <Field label="Contract sum" value={fmtUsdc(sub ? 40_000n : 100_000n)} />
+        <Field label="Contract sum" value={fmtUsdc(sub ? 40_000n : briefAtomic(brief))} />
       </div>
       <p className="mt-3 text-neutral-700">
-        <span className="font-medium">{payer ? titleCase(payer.name) : ""}</span> engages <span className="font-medium">{payee ? titleCase(payee.name) : ""}</span> for: <span className="font-medium">{sub ? "Railing lights" : "Bridge railing repair"}</span>.
+        <span className="font-medium">{payer ? titleCase(payer.name) : ""}</span> engages <span className="font-medium">{payee ? titleCase(payee.name) : ""}</span> for: <span className="font-medium">{sub ? "Railing lights" : brief.title}</span>.
       </p>
       <table className="mt-3 w-full text-left text-[12px]">
         <tbody>
           <tr className="border-y border-neutral-200">
             <td className="py-1.5">1</td>
-            <td>{sub ? "Install railing lights" : "Replace damaged railing sections"}</td>
-            <td className="text-right tabular-nums">{fmtUsdc(sub ? 40_000n : 100_000n)}</td>
+            <td>{sub ? "Install railing lights" : brief.line}</td>
+            <td className="text-right tabular-nums">{fmtUsdc(sub ? 40_000n : briefAtomic(brief))}</td>
           </tr>
         </tbody>
       </table>
@@ -368,6 +494,45 @@ function CrsReportDoc({ live, x, sub }: { live: Live; x: Parts; sub: boolean }) 
   )
 }
 
+// Nakamura's progress package for Okafor: daily report, materials receipt and Okafor's inspection (demo documents
+// around the live line and bill).
+function ProgressDoc({ live, x }: { live: Live; x: Parts }) {
+  const line = x.line2
+  const reviewer = line?.reviewedBy ? live.members.find(m => m.identity.isEqual(line.reviewedBy!)) : undefined
+  return (
+    <Paper letterhead="Nakamura Electric Inc." kind="Progress package · railing lights" stamp={line?.state === "ACCEPTED" ? <Stamp text="Accepted" /> : undefined}>
+      <div className="grid grid-cols-3 gap-3">
+        <Field label="Line" value={line?.description ?? "Install railing lights"} />
+        <Field label="Scheduled" value={fmtUsdc(line?.scheduledValue ?? 40_000n)} />
+        <Field label="Status" value={titleCase((line?.state ?? "in progress").replaceAll("_", " "))} />
+      </div>
+      <p className="mt-3 text-[10px] font-semibold tracking-wide text-neutral-500 uppercase">Daily report</p>
+      <ul className="mt-1 list-disc pl-4 text-[12px] text-neutral-700">
+        <li>24 LED railing fixtures mounted on the north span; conduit run complete</li>
+        <li>Crew: 3 electricians, 22 hours · no safety incidents</li>
+        <li>Circuit tested and energized</li>
+      </ul>
+      <p className="mt-3 text-[10px] font-semibold tracking-wide text-neutral-500 uppercase">Materials receipt</p>
+      <table className="mt-1 w-full text-[12px]">
+        <tbody>
+          <tr className="border-y border-neutral-200">
+            <td className="py-1">Westline Electrical Supply · INV-88213</td>
+            <td>24 × LED railing fixture, conduit, fittings</td>
+            <td className="text-right text-green-800">✓ matches scope</td>
+          </tr>
+        </tbody>
+      </table>
+      <p className="mt-3 text-[10px] font-semibold tracking-wide text-neutral-500 uppercase">Inspection</p>
+      <p className="text-[12px] text-neutral-700">
+        {line?.state === "ACCEPTED"
+          ? `Accepted by ${titleCase(reviewer?.displayName ?? "Okafor's inspector")}${line.reviewNote ? `: “${line.reviewNote}”` : ""}`
+          : "Waiting for Okafor's inspector"}
+      </p>
+      <p className="mt-2 text-[10px] text-neutral-400">Report and receipt are demo documents; the line, inspection and bill are live.</p>
+    </Paper>
+  )
+}
+
 function ReceiptDoc({ live, x, sub }: { live: Live; x: Parts; sub: boolean }) {
   const bill = sub ? x.bill2 : x.bill1
   if (!bill) return <Placeholder text="Waiting for approvals…" />
@@ -391,6 +556,24 @@ function ReceiptDoc({ live, x, sub }: { live: Live; x: Parts; sub: boolean }) {
         <a href={`https://sepolia.basescan.org/tx/${pay.txHash}`} target="_blank" rel="noreferrer" className="mt-2 inline-block text-[11px] text-blue-800 underline">
           View on Basescan
         </a>
+      ) : null}
+      {pay ? (
+        <div className="mt-3 border-t border-neutral-200 pt-2">
+          <p className="text-[10px] font-semibold tracking-wide text-neutral-500 uppercase">Receipt verification</p>
+          <ul className="mt-1 space-y-0.5 text-[12px]">
+            {[
+              ["Transaction confirmed", pay.state === "CONFIRMED" && !!pay.txHash],
+              ["Amount equals the approved bill", pay.amount === bill.amount],
+              ["Paid to the payee's verified wallet", !!payee && pay.toWallet.toLowerCase() === payee.payoutWallet.toLowerCase()],
+              ["Paid from the payer's treasury", !!payer?.treasuryWallet],
+              ["Recorded on both ledgers", pay.state === "CONFIRMED"],
+            ].map(([t, ok]) => (
+              <li key={String(t)} className={ok ? "text-green-800" : "text-neutral-500"}>
+                {ok ? "✓" : "…"} {t}
+              </li>
+            ))}
+          </ul>
+        </div>
       ) : null}
     </Paper>
   )
@@ -536,6 +719,7 @@ function CaseFileDoc({ live, x }: { live: Live; x: Parts }) {
 
 // Every applicant's CRS screening, as a report the city files before awarding.
 function ScreeningDoc({ live, selected }: { live: Live; selected: boolean }) {
+  const [open, setOpen] = useState<bigint | null>(null)
   const agency = live.organizations.find(o => o.kind === "AGENCY")
   const applicants = live.organizations
     .filter(o => o.kind !== "AGENCY")
@@ -544,37 +728,56 @@ function ScreeningDoc({ live, selected }: { live: Live; selected: boolean }) {
       const v = [...live.verifications]
         .filter(z => z.orgId === o.id && z.subjectType === "ORG")
         .sort((a, b) => (a.checkedAt.microsSinceUnixEpoch < b.checkedAt.microsSinceUnixEpoch ? -1 : 1))[0] as (Live["verifications"][number] & { decision?: string }) | undefined
-      return { o, d: v ? (v.decision ?? (v.passed ? "PASS" : "FAIL")) : "PENDING", reason: v?.reasons?.split(",").filter(Boolean)[0] }
+      const reasons = v?.reasons ? v.reasons.split(",").filter(Boolean) : []
+      return { o, d: v ? (v.decision ?? (v.passed ? "PASS" : "FAIL")) : "PENDING", reasons, products: v?.products ?? "" }
     })
     .sort((a, b) => (a.o.kind === "PRIME" ? 1 : 0) - (b.o.kind === "PRIME" ? 1 : 0))
   const tone = (d: string) => (d === "PASS" ? "border-green-700 text-green-700" : d === "REVIEW" ? "border-amber-600 text-amber-700" : "border-red-700 text-red-700")
   return (
     <Paper letterhead={agency ? titleCase(agency.name) : "Agency"} kind="Contractor screening report · CRS">
-      <p className="mb-3 text-[12px] text-neutral-600">Bridge railing repair · {applicants.length} applicants · identity, credit, liens & judgments, sanctions, fraud signals, registry</p>
+      <p className="mb-3 text-[12px] text-neutral-600">Bridge railing repair · {applicants.length} applicants · click an applicant to see each check</p>
       <ul className="divide-y divide-neutral-200">
-        {applicants.map((a, i) => (
-          <motion.li
-            key={String(a.o.id)}
-            initial={{ opacity: 0, x: -8 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.2 + i * 0.35 }}
-            className={cn("flex items-center gap-3 py-2", selected && a.o.kind === "PRIME" && "-mx-2 rounded bg-green-50 px-2")}
-          >
-            <span className="min-w-0 flex-1">
-              <span className="block truncate font-medium text-neutral-900">{titleCase(a.o.name)}</span>
-              <span className="block truncate text-[11px] text-neutral-500">{a.reason ? crsReason(a.reason) : a.d === "PASS" ? "No issues found" : "—"}</span>
-            </span>
-            <motion.span
-              initial={{ scale: 1.8, opacity: 0, rotate: -12 }}
-              animate={{ scale: 1, opacity: 1, rotate: -6 }}
-              transition={{ delay: 0.45 + i * 0.35, type: "spring", stiffness: 260, damping: 14 }}
-              className={cn("rounded border-2 px-1.5 py-0.5 text-[10px] font-bold tracking-widest uppercase", tone(a.d))}
-            >
-              {a.d === "PASS" ? "Pass" : a.d === "REVIEW" ? "Review" : a.d === "FAIL" ? "Fail" : "…"}
-            </motion.span>
-            {selected && a.o.kind === "PRIME" ? <span className="text-[11px] font-semibold text-green-700">Selected</span> : null}
-          </motion.li>
-        ))}
+        {applicants.map((a, i) => {
+          const isOpen = open === a.o.id
+          return (
+            <motion.li key={String(a.o.id)} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2 + i * 0.35 }} className={cn(selected && a.o.kind === "PRIME" && "-mx-2 rounded bg-green-50 px-2")}>
+              <button onClick={() => setOpen(isOpen ? null : a.o.id)} className="flex w-full items-center gap-3 py-2 text-left">
+                <ChevronRight className={cn("size-3.5 shrink-0 text-neutral-400 transition-transform", isOpen && "rotate-90")} />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-medium text-neutral-900">{titleCase(a.o.name)}</span>
+                  <span className="block truncate text-[11px] text-neutral-500">{a.reasons[0] ? crsReason(a.reasons[0]) : a.d === "PASS" ? "No issues found" : "—"}</span>
+                </span>
+                {selected && a.o.kind === "PRIME" ? <span className="text-[11px] font-semibold text-green-700">Selected</span> : null}
+                <motion.span
+                  initial={{ scale: 1.8, opacity: 0, rotate: -12 }}
+                  animate={{ scale: 1, opacity: 1, rotate: -6 }}
+                  transition={{ delay: 0.45 + i * 0.35, type: "spring", stiffness: 260, damping: 14 }}
+                  className={cn("rounded border-2 px-1.5 py-0.5 text-[10px] font-bold tracking-widest uppercase", tone(a.d))}
+                >
+                  {a.d === "PASS" ? "Pass" : a.d === "REVIEW" ? "Review" : a.d === "FAIL" ? "Fail" : "…"}
+                </motion.span>
+              </button>
+              {isOpen ? (
+                <motion.ul initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} className="mb-2 ml-6 space-y-1 overflow-hidden rounded-sm bg-neutral-50 p-2.5 text-[12px]">
+                  {CRS_CHECKS.map(c => {
+                    const hits = a.reasons.filter(r => c.reasons.test(r))
+                    const ran = a.products.split(",").some(p => p.trim().startsWith(c.product))
+                    return (
+                      <li key={c.id} className="flex items-start gap-2">
+                        <span className={cn("w-3 shrink-0 font-bold", hits.length ? "text-red-700" : ran ? "text-green-700" : "text-neutral-400")}>{hits.length ? "✗" : ran ? "✓" : "·"}</span>
+                        <span className="min-w-0 flex-1">
+                          <span className="font-medium text-neutral-900">{c.label}</span> <span className="text-neutral-500">· {c.question}</span>
+                          {hits.length ? <span className="block text-red-700">{hits.map(crsReason).join(", ")}</span> : null}
+                        </span>
+                        <span className="shrink-0 text-[11px] text-neutral-500">{ran ? c.source : "not run"}</span>
+                      </li>
+                    )
+                  })}
+                </motion.ul>
+              ) : null}
+            </motion.li>
+          )
+        })}
       </ul>
       <p className="mt-3 text-[10px] text-neutral-500">Bidding is simulated for the demo; each result is a real CRS sandbox check. Only results and attestation hashes are stored.</p>
     </Paper>
@@ -636,19 +839,32 @@ function Placeholder({ text }: { text: string }) {
   )
 }
 
-export function StepDocument({ step, live, contractId }: { step: LiveStep; live: Live; contractId?: bigint }) {
+export function StepDocument({
+  step,
+  live,
+  contractId,
+  brief = DEFAULT_BRIEF,
+  setBrief,
+}: {
+  step: LiveStep
+  live: Live
+  contractId?: bigint
+  brief?: ProjectBrief
+  setBrief?: (b: ProjectBrief) => void
+}) {
   const x = projectParts(live, contractId)
   const nameOf = (orgId?: bigint) => titleCase(live.organizations.find(o => o.id === orgId)?.name ?? "")
   const sub = step.level === "sub"
   const k = step.key
-  if (k === "post") return <ContractDoc live={live} x={x} sub={false} nameOf={nameOf} />
+  if (k === "post") return setBrief && !step.done ? <BriefEditor live={live} brief={brief} setBrief={setBrief} /> : <BriefDoc live={live} brief={brief} />
   if (k === "checks") return <PickChecksDoc live={live} />
+  if (k === "negotiate") return <DraftContract live={live} sub={false} brief={brief} />
   if (k === "screen") return <ScreeningDoc live={live} selected={false} />
   if (k === "select") return <ScreeningDoc live={live} selected={step.done} />
   if (k === "issue" || k === "prime-sign" || k === "agency-sign") return <ContractDoc live={live} x={x} sub={false} nameOf={nameOf} />
   if (k === "sub-hire") return <ContractDoc live={live} x={x} sub nameOf={nameOf} />
   if (k === "gov-freeze") return <EmailDoc x={x} />
-  if (k === "gov-reject1" || k === "gov-reject2") return <CaseFileDoc live={live} x={x} />
+  if (k === "gov-reject") return <CaseFileDoc live={live} x={x} />
   if (k === "gov-fraud") return x.change ? <EmailDoc x={x} /> : <PhishingDoc live={live} x={x} />
   const line = sub ? x.line2 : x.line1
   const payerName = nameOf(sub ? x.sub?.payerOrgId : x.contract?.payerOrgId)
@@ -659,7 +875,7 @@ export function StepDocument({ step, live, contractId }: { step: LiveStep; live:
     const inspector = reviewer ? (live.members.find(m => m.identity.isEqual(reviewer))?.displayName ?? "") : ""
     return <InspectionDoc line={line} inspector={inspector} payerName={payerName} />
   }
-  if (k === "sub-work") return x.bill2 ? <PayAppDoc live={live} x={x} sub annotate={false} approvals={false} /> : <EvidenceDoc line={line} payeeName={payeeName} />
+  if (k === "sub-work") return <ProgressDoc live={live} x={x} />
   if (k === "gov-bill") return <PayAppDoc live={live} x={x} sub={false} annotate={false} approvals={false} />
   if (k.endsWith("-agent")) return <PayAppDoc live={live} x={x} sub={sub} annotate approvals={false} />
   if (k.endsWith("-crs")) return <CrsReportDoc live={live} x={x} sub={sub} />

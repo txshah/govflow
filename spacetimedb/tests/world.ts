@@ -72,12 +72,12 @@ export function makeWorld() {
       subjectType: 'MEMBER', orgId, memberIdentity: identityOf(a), invoiceId: undefined,
       products: 'IDV,OFAC', decision: decisionOf(passed), reasons: passed ? '' : 'name mismatch', identityHash: HASH, sandbox: true,
     });
-  const verifyOrg = (orgId: bigint, result: boolean | 'REVIEW' = true, invoiceId?: bigint) => {
+  const verifyOrg = (orgId: bigint, result: boolean | 'REVIEW' = true, invoiceId?: bigint, identityHash = HASH) => {
     const decision = decisionOf(result);
     call(service, mod.recordVerification, {
       subjectType: 'ORG', orgId, memberIdentity: undefined, invoiceId,
       products: 'BUSINESS,OFAC', decision,
-      reasons: decision === 'PASS' ? '' : decision === 'REVIEW' ? 'THIN_FILE' : 'identity mismatch', identityHash: HASH, sandbox: true,
+      reasons: decision === 'PASS' ? '' : decision === 'REVIEW' ? 'THIN_FILE' : 'identity mismatch', identityHash, sandbox: true,
     });
     return [...h.db.verification.iter()].at(-1)!.id;
   };

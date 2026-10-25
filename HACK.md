@@ -63,8 +63,14 @@ outside work, and writes results through service-only reducers. The database re-
 2. What does the 0.01 x402 payment buy, and what doesn't it prove? (A paid CRS check; not legal identity or signing authority.)
 3. What if the API crashes mid-payout? (Idempotency key per payout + CDP idempotency; payments resume from their recorded state.)
 
+## Pitch
+
+**One-liner:** GovFlow lets a city pay its contractors in USDC only after CRS verifies who is being paid, Claude checks the bill against accepted work, and two verified people approve.
+**Roles:** Driver _TBD_ · Narrator _TBD_ · Tech answers _TBD_ · Backup _TBD_. Script, 30-second version and Q&A: `PITCH.md`.
+
 ## Status log
 
 - 10:35 Sat · Harden · weakest: Functionality (no Claude, manual match) · next: spike + build the matcher
 - 12:42 Sat · Freeze · weakest: Functionality (demo not rehearsed in the UI; live data used up) · next: commit + push, reseed, rehearse in the UI, README
 - 12:55 Sat · Freeze · reseeded Maincloud (0.40 / 0.60 / 0.15 milestones, Fraud Finder on every org, roles re-approved) · next: rehearse once in the UI, commit + push, README
+- 22:49 Sat · Ship · secret scan clean (files + history), fresh clone typechecks, README has value prop/architecture/setup/honesty; DEVPOST.md drafted · missing: backup video, pitch roles, Team/Built-at in README, live URL, ~22 uncommitted files · next: record video, /hack-pitch, commit + push

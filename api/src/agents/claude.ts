@@ -15,7 +15,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { betaJSONSchemaOutputFormat } from '@anthropic-ai/sdk/helpers/beta/json-schema';
 
-const client = new Anthropic();
+export const client = new Anthropic();
 export const MODEL = process.env.CLAUDE_MODEL?.trim() || 'claude-opus-5-5';
 
 type Schema = Parameters<typeof betaJSONSchemaOutputFormat>[0];

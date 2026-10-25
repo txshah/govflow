@@ -116,7 +116,9 @@ export const voteUnfreeze = spacetimedb.reducer(
     );
     const reverified = since.some(v => v.passed && v.checkedAt.microsSinceUnixEpoch > frozenAt);
     const reviewOnly =
-      inv.freezeReason === FreezeReason.VERIFICATION_REVIEW && !change && !since.some(v => v.decision === Decision.FAIL);
+      (inv.freezeReason === FreezeReason.VERIFICATION_REVIEW || inv.freezeReason === FreezeReason.IDENTITY_CHANGED) &&
+      !change &&
+      !since.some(v => v.decision === Decision.FAIL);
     if (!reverified && !reviewOnly) throw new SenderError('the payee must pass CRS re-verification before unfreezing');
 
     const count = castVote(ctx, inv, ApprovalKind.UNFREEZE, vote, reason);
@@ -137,6 +139,12 @@ export const voteUnfreeze = spacetimedb.reducer(
         state: vote === Vote.ACCEPT_CHANGE ? ChangeState.ACCEPTED : ChangeState.REJECTED,
         resolvedAt: ctx.timestamp,
       });
+    }
+    // Two approvers accepted a new person behind the business: their verified hash becomes the one on file.
+    if (inv.freezeReason === FreezeReason.IDENTITY_CHANGED) {
+      const latest = since.filter(v => v.passed && v.identityHash).at(-1);
+      const payee = ctx.db.organization.id.find(inv.payeeOrgId)!;
+      if (latest) ctx.db.organization.id.update({ ...payee, identityHash: latest.identityHash, lastVerificationId: latest.id });
     }
     assertTransition('invoice', inv.state, I.FINANCE_REVIEW);
     ctx.db.invoice.id.update({

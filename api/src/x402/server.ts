@@ -19,6 +19,7 @@ import { BASE_SEPOLIA_CAIP2, VERIFICATION_PRICE, requireAddress } from '../confi
 import { IDENTITY_ANSWER_KEY } from '../crs/answerKey.ts';
 import { PERSONAS } from '../crs/personas.ts';
 import { verifyBusiness } from '../crs/verify.ts';
+import { extractDocument, extractProject } from '../agents/extractor.ts';
 
 /** What the endpoint needs to know about a bill's payee. */
 export type Payee = { legalName: string; beneficiaryWallet: string; payoutWallet: string };
@@ -37,7 +38,28 @@ export type VerificationResult = {
 export async function createVerificationApp(resolvePayee: ResolvePayee) {
   const payTo = requireAddress('X402_PAY_TO');
   const app = express();
-  app.use(express.json());
+  app.use(express.json({ limit: '15mb' }));
+
+  // Document upload → Claude extraction. Free (not behind x402) and only for the local web app.
+  app.use('/api/extract', (req, res, next) => {
+    res.setHeader('Access-Control-Allow-Origin', req.headers.origin && /^http:\/\/(localhost|127\.0\.0\.1):3100$/.test(req.headers.origin) ? req.headers.origin : 'http://localhost:3100');
+    res.setHeader('Access-Control-Allow-Headers', 'content-type');
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    if (req.method === 'OPTIONS') return void res.sendStatus(204);
+    next();
+  });
+  app.post('/api/extract', async (req, res) => {
+    try {
+      const { name, mediaType, data } = req.body ?? {};
+      if (typeof data !== 'string' || typeof mediaType !== 'string') return void res.status(400).json({ error: 'name, mediaType and base64 data required' });
+      const file = { name: String(name ?? 'upload'), mediaType, data };
+      const out = req.body.kind === 'project' ? await extractProject(file) : await extractDocument(file);
+      if (!out) return void res.status(422).json({ error: 'Claude could not read this document' });
+      res.json(out);
+    } catch (e) {
+      res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+    }
+  });
 
   const server = await createX402Server({
     environment: 'development', // Base Sepolia; never mainnet

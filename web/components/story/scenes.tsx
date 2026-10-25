@@ -211,6 +211,81 @@ function PayFlow({ live, bill, s, level }: { live: Live; bill?: Live["invoices"]
 
 // ---------- scenes ----------
 
+function Problem() {
+  const stats = [
+    ["$2.77B", "lost to business email compromise in 2024", "FBI IC3 2024 report"],
+    ["82%", "of contractors wait more than 30 days to get paid", "Rabbet, 2024 Construction Payments Report"],
+    ["Scattered", "tenders on portals, bids by email, bank details in spreadsheets", "no single place to verify who you pay"],
+  ]
+  return (
+    <>
+      <Title kicker="The problem" title="Public money moves slowly, and it's easy to steal" />
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="glass mx-auto max-w-3xl rounded-xl p-6">
+        <p className="text-xs font-semibold tracking-wide text-destructive uppercase">A true story · Cabarrus County, North Carolina</p>
+        <p className="mt-2 text-lg leading-relaxed">
+          In late 2018 the county got an email from “its contractor” building a new high school, with a signed form and bank letter asking to update its bank details. Staff made the change. On December 21 the county sent <span className="font-semibold">$2.5 million</span> to the scammers. Nobody noticed until the real contractor called about a missed payment. <span className="font-semibold">$1.7 million was never recovered.</span>
+        </p>
+      </motion.div>
+      <div className="mx-auto mt-5 grid max-w-3xl grid-cols-3 gap-3">
+        {stats.map(([n, t, src], i) => (
+          <motion.div key={n} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.7 + i * 0.2 }} className="glass rounded-xl p-4">
+            <p className="text-3xl font-semibold tabular-nums">{n}</p>
+            <p className="mt-1 text-sm">{t}</p>
+            <p className="mt-1 text-[11px] text-muted-foreground">{src}</p>
+          </motion.div>
+        ))}
+      </div>
+    </>
+  )
+}
+
+function Solution() {
+  const pillars = [
+    {
+      Icon: ShieldCheck,
+      title: "Secure",
+      points: [
+        "Every company and person is CRS-verified before award, and re-checked before every payment",
+        "Money only goes to the wallet bound to the verified owner; a changed wallet or owner freezes payment",
+        "Claude checks every bill against the contract; two people approve, never an agent",
+      ],
+    },
+    {
+      Icon: Zap,
+      title: "Seamless",
+      points: [
+        "One place for every open tender, every bid and every bill, for the city, prime and subs",
+        "Upload an RFP and Claude fills in the project; agents exchange the paperwork",
+        "Paid in USDC the moment work is accepted and approved: minutes, not months",
+      ],
+    },
+  ]
+  return (
+    <>
+      <Title kicker="Our solution" title="GovFlow: secure and seamless public payments" sub="Unify the postings, secure every payment, and pay contractors in minutes." />
+      <div className="mx-auto grid max-w-4xl grid-cols-2 gap-4">
+        {pillars.map(({ Icon, title, points }, i) => (
+          <motion.div key={title} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 + i * 0.25 }} className="glass rounded-xl p-6">
+            <p className="flex items-center gap-2 text-2xl font-semibold">
+              <span className="grid size-10 place-items-center rounded-full bg-primary/10 text-primary">
+                <Icon className="size-5" />
+              </span>
+              {i + 1}. {title}
+            </p>
+            <ul className="mt-4 space-y-2.5 text-sm">
+              {points.map((t, k) => (
+                <motion.li key={t} initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.6 + i * 0.25 + k * 0.15 }} className="flex gap-2">
+                  <Check className="mt-0.5 size-4 shrink-0 text-leaf" /> {t}
+                </motion.li>
+              ))}
+            </ul>
+          </motion.div>
+        ))}
+      </div>
+    </>
+  )
+}
+
 function Issue({ s }: Ctx) {
   return (
     <>
@@ -520,6 +595,8 @@ function Done({ s }: Ctx) {
 }
 
 export const SCENES = [
+  { key: "problem", chapter: "The problem", render: Problem, secs: 14 },
+  { key: "solution", chapter: "Our solution", render: Solution, secs: 12 },
   { key: "issue", chapter: "Contract issued", render: Issue, secs: 7 },
   { key: "screen", chapter: "Applications", render: Screen, secs: 10 },
   { key: "pick", chapter: "Selected", render: Pick, secs: 10 },

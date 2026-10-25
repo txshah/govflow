@@ -68,6 +68,8 @@ export const FreezeReason = {
   VERIFICATION_FAILED: 'VERIFICATION_FAILED',
   // CRS signals (thin file, new entity, fraud alert…), not proof: two approvers can release after review.
   VERIFICATION_REVIEW: 'VERIFICATION_REVIEW',
+  // The payee passed CRS, but as a different person than at award: two approvers must accept the change, with a reason.
+  IDENTITY_CHANGED: 'IDENTITY_CHANGED',
 } as const;
 
 export const Decision = { PASS: 'PASS', REVIEW: 'REVIEW', FAIL: 'FAIL' } as const;

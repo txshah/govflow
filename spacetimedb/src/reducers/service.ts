@@ -10,6 +10,7 @@
  *
  * Outputs:
  * - verification rows; on a pass the member/org is marked verified and stamped with the attestation hash
+ * - A payee check whose identity hash differs from the one on file freezes the bill (IDENTITY_CHANGED)
  * - A payee check on a MATCHED bill moves it to FINANCE_REVIEW on PASS, or freezes it (VERIFICATION_FAILED on FAIL, VERIFICATION_REVIEW on REVIEW)
  * - x402Receipt rows within mandate and platform spend caps; payment rows; invoice → PAYMENT_QUEUED / SETTLED / FAILED
  * - payout ledger entries, agentAction and agentFinding rows, auditEvent rows
@@ -71,7 +72,11 @@ export const recordVerification = spacetimedb.reducer(
       invoiceId: args.invoiceId,
       checkedAt: ctx.timestamp,
     });
-    if (args.subjectType === 'ORG' && passed)
+    // At payment time the payee's hash must match the one on file from the award; a different person never
+    // replaces it silently.
+    const identityChanged =
+      args.subjectType === 'ORG' && passed && args.invoiceId !== undefined && !!org.identityHash && org.identityHash !== args.identityHash;
+    if (args.subjectType === 'ORG' && passed && !identityChanged)
       ctx.db.organization.id.update({ ...org, verified: true, lastVerificationId: v.id, identityHash: args.identityHash });
     appendAudit(ctx, 'recordVerification', 'verification', v.id, `${args.subjectType} ${decision} ${args.reasons}`);
 
@@ -80,7 +85,9 @@ export const recordVerification = spacetimedb.reducer(
       const inv = ctx.db.invoice.id.find(args.invoiceId);
       if (!inv) throw new SenderError('no such invoice');
       if (inv.payeeOrgId !== args.orgId) throw new SenderError('verification is not for this bill\'s payee');
-      if (inv.state === I.MATCHED) {
+      if (identityChanged && inv.state !== I.PAYMENT_FROZEN) {
+        freezeInvoice(ctx, inv, FreezeReason.IDENTITY_CHANGED);
+      } else if (inv.state === I.MATCHED) {
         if (passed) {
           assertTransition('invoice', inv.state, I.FINANCE_REVIEW);
           ctx.db.invoice.id.update({ ...inv, state: I.FINANCE_REVIEW });

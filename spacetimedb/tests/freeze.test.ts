@@ -134,3 +134,32 @@ describe('wallet binding', () => {
     expect(w.invoice(id).state).toBe('FINANCE_REVIEW');
   });
 });
+
+describe('identity hash at payment', () => {
+  it('a payee who passes CRS as a different person freezes the bill; two approvers with a reason adopt the new hash', () => {
+    const w = makeWorld();
+    const L = w.levels.gov;
+    const before = w.h.db.organization.id.find(L.payee)!.identityHash;
+    const ms = w.acceptLine(L);
+    const id = w.submitBill(L, [ms.id], ms.scheduledValue);
+    w.call(w.service, mod.recordMatch, { invoiceId: id, agentId: L.payerAgent, result: 'MATCHED', reasons: 'ok', modelId: 'test' });
+    const other = 'b'.repeat(64);
+    w.verifyOrg(L.payee, true, id, other);
+    expect(w.invoice(id).state).toBe('PAYMENT_FROZEN');
+    expect(w.invoice(id).freezeReason).toBe('IDENTITY_CHANGED');
+    expect(w.h.db.organization.id.find(L.payee)!.identityHash).toBe(before);
+    const release = (who: (typeof L.approvers)[number]) =>
+      w.call(who, mod.voteUnfreeze, { invoiceId: id, vote: 'RELEASE', reason: 'new owner documented and verified' });
+    release(L.approvers[0]);
+    release(L.approvers[1]);
+    expect(w.invoice(id).state).toBe('FINANCE_REVIEW');
+    expect(w.h.db.organization.id.find(L.payee)!.identityHash).toBe(other);
+  });
+
+  it('the same person passes straight through', () => {
+    const w = makeWorld();
+    const id = w.billToReview(w.levels.gov);
+    expect(w.invoice(id).state).toBe('FINANCE_REVIEW');
+  });
+});
+

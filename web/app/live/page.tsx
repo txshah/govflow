@@ -13,12 +13,14 @@
 import Link from "next/link"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { AnimatePresence, motion } from "motion/react"
-import { ArrowRight, Building2, Check, Clapperboard, HardHat, Landmark, Plus, ShieldCheck, TriangleAlert } from "lucide-react"
+import { ArrowRight, Building2, Check, Clapperboard, Download, HardHat, Landmark, Plus, ShieldCheck, TriangleAlert } from "lucide-react"
 import { useLive, usePersonas, type Live } from "@/components/app/providers"
 import { AgentFeed } from "@/components/AgentFeed"
 import { StepDocument } from "@/components/live/documents"
+import { Finale } from "@/components/live/finale"
+import { loadRun, saveRun, saveTender, updateTender } from "@/lib/demo-state"
 import { StepWindows } from "@/components/live/windows"
-import { buildSteps, performStep, projectParts, usePersonaActor, type LiveStep } from "@/lib/live-steps"
+import { buildSteps, DEFAULT_BRIEF, performStep, projectParts, usePersonaActor, type LiveStep, type ProjectBrief } from "@/lib/live-steps"
 import { latestOrgCheck, decisionOf } from "@/lib/story"
 import {fmtUsdc, orgHue, roleLabel, short, titleCase, toDate, contractNo, docNo} from "@/lib/format"
 import { useNow } from "@/lib/use-now"
@@ -46,7 +48,7 @@ function Avatar({ name, kind, size = "md" }: { name: string; kind: string; size?
 const HOLD_MS = 3000
 
 const AUTO_KINDS = ["agent", "crs", "payout", "risk"]
-const TURN_LABEL: Record<string, string> = { you: "Your turn", agent: "AI agent", crs: "CRS · x402", payout: "Payout", risk: "AI agent · investigating", fraud: "Your call", screen: "CRS screening" }
+const TURN_LABEL: Record<string, string> = { you: "Your turn", agent: "AI agent", crs: "CRS · x402", payout: "Payout", risk: "AI agent · investigating", fraud: "Your call", screen: "CRS screening", checks: "CRS · pre-award", agents: "Agent to agent" }
 
 // When an automatic step's result landed (agent finding, CRS attestation, confirmed payout, case file).
 function autoDoneAt(step: LiveStep, live: Live): number | undefined {
@@ -58,6 +60,16 @@ function autoDoneAt(step: LiveStep, live: Live): number | undefined {
   if (step.kind === "crs") return ms([...live.verifications].filter(v => v.invoiceId === b.id).sort((a, c) => (a.checkedAt.microsSinceUnixEpoch > c.checkedAt.microsSinceUnixEpoch ? -1 : 1))[0]?.checkedAt)
   if (step.kind === "payout") return ms(live.payments.find(p => p.invoiceId === b.id && p.state === "CONFIRMED")?.updatedAt)
   return undefined
+}
+
+// Saves the document on screen as a plain-text file named after the step.
+function downloadDoc(el: HTMLElement | null, title: string) {
+  if (!el) return
+  const text = el.innerText.replace(/\n{3,}/g, "\n\n").trim()
+  const name = `govflow-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}.txt`
+  const url = URL.createObjectURL(new Blob([`${title}\n${"=".repeat(title.length)}\n\n${text}\n`], { type: "text/plain" }))
+  Object.assign(document.createElement("a"), { href: url, download: name }).click()
+  URL.revokeObjectURL(url)
 }
 
 function resultFor(step: LiveStep, live: Live, contractId?: bigint) {
@@ -79,6 +91,8 @@ function resultFor(step: LiveStep, live: Live, contractId?: bigint) {
       return "Posted for bids by a CRS-verified agency"
     case "select":
       return "Okafor Builders LLC selected · failed applicants blocked"
+    case "negotiate":
+      return "Offer, schedule of values and insurance certificate exchanged"
     case "checks": {
       const prime = live.organizations.find(o => o.kind === "PRIME")
       return `All six checks clean · CRS hash ${short(prime?.identityHash ?? "", 6, 4)}`
@@ -95,8 +109,8 @@ function resultFor(step: LiveStep, live: Live, contractId?: bigint) {
   if (step.key.endsWith("-bill")) return bill ? `${docNo(bill)} · ${fmtUsdc(bill.amount)}` : ""
   if (step.key.endsWith("-agent")) return bill ? `${bill.matchResult.toLowerCase()} · ${bill.matchReasons.split("\n")[0]}` : ""
   if (step.key.endsWith("-crs")) return "Every check came back clean"
-  if (step.key.endsWith("-approve1")) return `Approved by ${nameOf(votes[0]?.approver.toHexString())}`
-  if (step.key.endsWith("-approve2")) return `Approved by ${nameOf(votes[1]?.approver.toHexString())}`
+  if (step.key === "gov-approve") return `Approved by ${votes.map(v => nameOf(v.approver.toHexString())).join(" and ")}`
+  if (step.key === "gov-reject") return "Wallet change rejected by both approvers · verified wallet kept"
   if (step.key.endsWith("-paid")) return pay ? `${fmtUsdc(pay.amount)} · ${pay.simulated ? "simulated" : "Base Sepolia"} ${short(pay.txHash, 8, 6)}` : ""
   return ""
 }
@@ -122,9 +136,37 @@ export default function LivePage() {
   const [posted, setPosted] = useState(false)
   const [checked, setChecked] = useState(false)
   const [triedBad, setTriedBad] = useState(false)
+  const [negotiated, setNegotiated] = useState(false)
+  const [brief, setBrief] = useState<ProjectBrief>(DEFAULT_BRIEF)
+  const [tenderId, setTenderId] = useState<string | null>(null)
+
+  // Restore the run after visiting another page (e.g. Open tenders), then keep saving it.
+  const [restored, setRestored] = useState(false)
+  useEffect(() => {
+    const r = loadRun()
+    /* eslint-disable react-hooks/set-state-in-effect -- one-time restore from browser storage after mount */
+    if (r) {
+      setChosen(r.chosen === null ? null : r.chosen === "new" ? "new" : BigInt(r.chosen))
+      setTenderId(r.tenderId)
+      setFraudSkipped(r.fraudSkipped)
+      setPosted(r.posted)
+      setScreened(r.screened)
+      setSelected(r.selected)
+      setChecked(r.checked)
+      setNegotiated(r.negotiated)
+      setTriedBad(r.triedBad)
+      if (r.brief) setBrief(r.brief)
+    }
+    setRestored(true)
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [])
+  useEffect(() => {
+    if (!restored) return
+    saveRun({ chosen: chosen === null ? null : String(chosen), tenderId, fraudSkipped, posted, screened, selected, checked, negotiated, triedBad, brief })
+  }, [restored, chosen, tenderId, fraudSkipped, posted, screened, selected, checked, negotiated, triedBad, brief])
   const steps = useMemo(
-    () => buildSteps(live, projectId, { fraudSkipped, posted, screened, selected, checked }),
-    [live, projectId, fraudSkipped, posted, screened, selected, checked]
+    () => buildSteps(live, projectId, { fraudSkipped, posted, screened, selected, checked, negotiated }),
+    [live, projectId, fraudSkipped, posted, screened, selected, checked, negotiated]
   )
   const current = steps.findIndex(s => !s.done)
   const currentIndex = current === -1 ? steps.length : current
@@ -136,12 +178,14 @@ export default function LivePage() {
   const holding = prevDoneAt !== undefined && now - prevDoneAt < HOLD_MS
   const shown = view ?? (holding ? currentIndex - 1 : currentIndex)
   const step = steps[shown]
+  const docRef = useRef<HTMLDivElement>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const act = async () => {
+  const act = async (pairKey?: string) => {
     if (!step) return
     if (step.key === "post") {
+      setTenderId(saveTender(brief).id)
       setPosted(true)
       setPartyDone({ key: "post", at: Date.now() })
       return
@@ -155,8 +199,11 @@ export default function LivePage() {
     setError(null)
     setView(null)
     try {
-      const newId = await performStep(step, getLive, projectId, as)
-      if (newId !== undefined) setChosen(newId)
+      const newId = await performStep(pairKey ? { ...step, key: pairKey } : step, getLive, projectId, as, brief)
+      if (newId !== undefined) {
+        setChosen(newId)
+        if (tenderId) updateTender(tenderId, { contractId: String(newId) })
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message.replace(/^unauthorized: /, "Not allowed: ") : String(e))
     } finally {
@@ -172,16 +219,22 @@ export default function LivePage() {
     stepRef.current = { step, projectId, as }
   }, [step, projectId, as])
   const [retry, setRetry] = useState(0)
-  const autoKey = step && view === null && (step.kind === "party" || step.kind === "screen" || step.kind === "checks") && !step.done && !busy && !holding ? `${String(projectId)}:${step.key}` : null
+  const autoKey = step && view === null && (step.kind === "party" || step.kind === "screen" || step.kind === "checks" || step.kind === "agents") && !step.done && !busy && !holding ? `${String(projectId)}:${step.key}` : null
   useEffect(() => {
     if (!autoKey || autoRan.current === autoKey) return
     autoRan.current = autoKey
     const isScreen = autoKey.endsWith(":screen")
     const isChecks = autoKey.endsWith(":checks")
+    const isAgents = autoKey.endsWith(":negotiate")
     setTimeout(
       async () => {
         const { step: st, projectId: pid, as: actAs } = stepRef.current
         if (!st || `${String(pid)}:${st.key}` !== autoKey) return
+        if (isAgents) {
+          setNegotiated(true)
+          setPartyDone({ key: "negotiate", at: Date.now() })
+          return
+        }
         if (isChecks) {
           setChecked(true)
           setPartyDone({ key: "checks", at: Date.now() })
@@ -206,7 +259,7 @@ export default function LivePage() {
           setBusy(false)
         }
       },
-      isChecks ? 4500 : isScreen ? 3500 : 1500
+      isAgents ? 9000 : isChecks ? 4500 : isScreen ? 3500 : 1500
     )
   }, [autoKey, getLive, retry])
 
@@ -243,6 +296,9 @@ export default function LivePage() {
                 setPosted(false)
                 setChecked(false)
                 setTriedBad(false)
+                setNegotiated(false)
+                setTenderId(null)
+                setBrief(DEFAULT_BRIEF)
               }}
               className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3.5 text-sm font-medium text-primary-foreground"
             >
@@ -343,16 +399,21 @@ export default function LivePage() {
                 </p>
               ) : null}
 
-              <div className="mt-5 grid flex-1 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_20rem]">
+              <div className={cn("mt-5 grid flex-1 items-start gap-5", step.pair ? "xl:grid-cols-[minmax(0,1fr)_24rem]" : "xl:grid-cols-[minmax(0,1fr)_20rem]")}>
                 <AnimatePresence mode="wait">
                   <motion.div key={`doc-${step.key}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                    <StepDocument step={step} live={live} contractId={projectId} />
+                    <div ref={docRef}>
+                      <StepDocument step={step} live={live} contractId={projectId} brief={brief} setBrief={setBrief} />
+                    </div>
+                    <button onClick={() => downloadDoc(docRef.current, step.title)} className="mx-auto mt-2 flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground">
+                      <Download className="size-3.5" /> Download this document
+                    </button>
                   </motion.div>
                 </AnimatePresence>
                 <div className="space-y-3">
                   <AnimatePresence mode="popLayout">
                     <motion.div key={`win-${step.key}`} className="space-y-3" exit={{ opacity: 0, x: 60 }}>
-                      <StepWindows step={step} live={live} personas={personas} contractId={projectId} isCurrent={shown === currentIndex} busy={busy} onAct={act} onSkip={() => setFraudSkipped(true)} onTryBad={() => setTriedBad(true)} triedBad={triedBad} />
+                      <StepWindows step={step} live={live} personas={personas} contractId={projectId} isCurrent={shown === currentIndex} busy={busy} onAct={() => act()} onActKey={k => act(k)} onSkip={() => setFraudSkipped(true)} />
                     </motion.div>
                   </AnimatePresence>
                 </div>
@@ -360,11 +421,9 @@ export default function LivePage() {
             </>
           ) : (
             <motion.div key="finished" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="flex flex-1 flex-col items-center justify-center text-center">
-              <span className="grid size-14 place-items-center rounded-full bg-leaf text-background">
-                <Check className="size-7" strokeWidth={3} />
-              </span>
-              <h1 className="mt-4 text-3xl font-semibold">Project complete</h1>
-              <p className="mt-2 text-muted-foreground">Both levels paid. Every person and payee verified.</p>
+              <h1 className="text-3xl font-semibold">Bridge fixed: on time, in budget, no fraud</h1>
+              <p className="mt-2 mb-5 text-muted-foreground">Both levels paid. Every person and payee verified.</p>
+              <Finale live={live} contractId={projectId} />
               <button
                 onClick={() => {
                   setChosen("new")
@@ -375,6 +434,10 @@ export default function LivePage() {
                   setPosted(false)
                   setChecked(false)
                   setTriedBad(false)
+                  setNegotiated(false)
+                  setTenderId(null)
+                  setBrief(DEFAULT_BRIEF)
+                setNegotiated(false)
                 }}
                 className="mt-6 inline-flex h-10 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground"
               >

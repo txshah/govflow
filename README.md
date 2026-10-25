@@ -13,19 +13,27 @@ themselves in pop-up windows, with a mock document for each stage.
 
 1. **Post the project.** The city and everyone who will sign or approve are already CRS-verified.
 2. **CRS screens every applicant.** Identity, credit, liens and judgments, sanctions, fraud signals, business registry.
-3. **Select the contractor.** Trying an applicant that failed CRS is blocked, with the reasons shown.
+3. **Select the contractor.** Two verified bids are compared side by side; trying an applicant that failed CRS is blocked,
+   with the reasons shown.
 4. **Okafor Builders' six pre-award checks** come back clean and are stored as an attestation hash, never raw data.
-5. **Issue, sign and countersign** the contract; each side mandates its AI agent with a scope and budget.
-6. **Proof of work → inspection → pay application.**
-7. **Claude checks the bill** against the contract and accepted work (overbilling, unaccepted or double-billed work,
+5. **The agents settle the offer:** the city's agent and Okafor's agent exchange the offer, schedule of values and
+   insurance certificate (scripted messages, downloadable files).
+6. **Issue, sign and countersign** the contract; each side mandates its AI agent with a scope and budget.
+7. **Proof of work → inspection → pay application.**
+8. **Claude checks the bill** against the contract and accepted work (overbilling, unaccepted or double-billed work,
    prompt injection in the memo). It can flag, never approve or pay.
-8. **Paid CRS check on the payee:** the agent pays 0.01 USDC over x402 for a fresh check.
-9. **Optional fraud beat:** an impostor emails a new wallet. Logging it freezes the bill, the agent re-verifies the payee
+9. **Paid CRS check on the payee:** the agent pays 0.01 USDC over x402 for a fresh check, and its identity hash must
+   match the one stored at award. A different person behind the business freezes the bill until two approvers accept
+   the change with a reason.
+10. **Optional fraud beat:** an impostor emails a new wallet. Logging it freezes the bill, the agent re-verifies the payee
    and checks the sender, writes a case file, and two approvers reject the change.
-10. **Two approvals → USDC settles** on the payee's verified wallet.
-11. **The same rules one level down:** prime → subcontractor.
+11. **Two approvals → USDC settles** on the payee's verified wallet.
+12. **The same rules one level down:** prime → subcontractor.
+13. **Finale:** the bridge before and after, on time, in budget, no fraud.
 
-`/story` tells the same journey as slides. Other pages show each room, the shared envelope, the ledger, audit log,
+`/tenders` is the city's open-tender board: how long each tender has been open, downloadable bid packages, applications
+with their CRS results, and a document upload where Claude extracts the company and its people and GovFlow checks them
+against CRS. `/story` tells the same journey as slides. Other pages show each room, the shared envelope, the ledger, audit log,
 agent activity and the vendor answer key.
 
 ## Architecture

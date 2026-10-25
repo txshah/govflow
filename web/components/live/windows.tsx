@@ -11,8 +11,8 @@
  */
 
 import { motion } from "motion/react"
-import { Bot, Loader2, ShieldCheck, Zap } from "lucide-react"
-import type { ReactNode } from "react"
+import { Bot, Check, FileDown, Loader2, ShieldCheck, Zap } from "lucide-react"
+import { useState, type ReactNode } from "react"
 import type { Live } from "@/components/app/providers"
 import type { Persona } from "@/lib/spacetime"
 import type { LiveStep } from "@/lib/live-steps"
@@ -52,6 +52,37 @@ const Line = ({ children, d = 0, tone }: { children: ReactNode; d?: number; tone
   </motion.p>
 )
 
+function downloadText(name: string, body: string) {
+  const url = URL.createObjectURL(new Blob([body], { type: "text/plain" }))
+  Object.assign(document.createElement("a"), { href: url, download: name }).click()
+  URL.revokeObjectURL(url)
+}
+
+const OFFER_FILES = [
+  {
+    name: "okafor-offer.txt",
+    body: [
+      "OFFER · Okafor Builders LLC",
+      "Project: Oakridge Avenue bridge railing repair",
+      "Price: 0.10 USDC (test USDC, Base Sepolia)",
+      "Start: Oct 27, 2026 · Duration: 10 working days",
+      "Payment: progress billing on accepted work, two approvals",
+      "Signed by the company's verified agent on behalf of Okafor Builders LLC",
+    ].join("\n"),
+  },
+  { name: "schedule-of-values.csv", body: ["line,description,scheduled_value_usdc", "1,Replace damaged railing sections,0.10", ""].join("\n") },
+  {
+    name: "insurance-certificate.txt",
+    body: [
+      "CERTIFICATE OF LIABILITY INSURANCE (demo)",
+      "Insured: Okafor Builders LLC",
+      "General liability: $2,000,000 each occurrence",
+      "Certificate holder: City of Oakridge Public Works",
+      "This is a demo document.",
+    ].join("\n"),
+  },
+]
+
 // The city itself and its people, all CRS-verified.
 function AgencyVerified({ live }: { live: Live }) {
   const agency = live.organizations.find(o => o.kind === "AGENCY")
@@ -74,51 +105,58 @@ function AgencyVerified({ live }: { live: Live }) {
   )
 }
 
-// Lets the presenter try to pick an applicant that failed CRS, and shows it being blocked.
-function TryBadPick({ live, tried, onTry }: { live: Live; tried: boolean; onTry?: () => void }) {
-  const bad = live.organizations
+// Every applicant as a card you can click: a failed or flagged one is refused with its CRS reasons; the clean one is selected.
+function ApplicantPicker({ live, busy, onSelect }: { live: Live; busy: boolean; onSelect: () => void }) {
+  const [refused, setRefused] = useState<bigint | null>(null)
+  const apps = live.organizations
     .filter(o => o.kind !== "AGENCY")
-    .map(o => ({ o, v: [...live.verifications].filter(z => z.orgId === o.id && z.subjectType === "ORG")[0] as (Live["verifications"][number] & { decision?: string }) | undefined }))
-    .find(({ v }) => v && (v.decision ?? (v.passed ? "PASS" : "FAIL")) === "FAIL")
-  if (!bad) return null
-  if (!tried)
-    return (
-      <button onClick={onTry} className="mt-3 inline-flex h-10 w-full items-center justify-center rounded-md border border-destructive/50 px-4 text-sm font-medium text-destructive hover:bg-destructive/8">
-        Try selecting {titleCase(bad.o.name)}
-      </button>
-    )
-  const reasons = bad.v?.reasons?.split(",").filter(Boolean) ?? []
+    .filter(o => o.kind === "PRIME" || !(o.payoutWallet && o.verified && live.contracts.some(c => c.payeeOrgId === o.id)))
+    .map(o => {
+      const v = [...live.verifications]
+        .filter(z => z.orgId === o.id && z.subjectType === "ORG")
+        .sort((a, b) => (a.checkedAt.microsSinceUnixEpoch > b.checkedAt.microsSinceUnixEpoch ? -1 : 1))[0] as (Live["verifications"][number] & { decision?: string }) | undefined
+      const d = v ? (v.decision ?? (v.passed ? "PASS" : "FAIL")) : "PENDING"
+      const reasons = v?.reasons ? v.reasons.split(",").filter(Boolean) : []
+      // Award rule: a clean CRS pass. A pass with liens or judgments on file is held back for this contract.
+      const clean = d === "PASS" && reasons.length === 0
+      return { o, d, reasons, clean, products: v?.products ?? "" }
+    })
+    .sort((a, b) => (a.o.kind === "PRIME" ? 1 : 0) - (b.o.kind === "PRIME" ? 1 : 0))
+  const picked = apps.find(a => a.o.id === refused)
   return (
-    <motion.div initial={{ scale: 0.92, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="mt-3 rounded-md border-2 border-destructive bg-destructive/8 p-3 text-sm">
-      <p className="font-bold tracking-wide text-destructive uppercase">Blocked</p>
-      <p className="mt-0.5">{titleCase(bad.o.name)} failed CRS screening and can&apos;t be awarded a contract.</p>
-      <ul className="mt-1.5 list-disc pl-5 text-xs text-muted-foreground">
-        {reasons.slice(0, 3).map(r => (
-          <li key={r}>{crsReason(r)}</li>
+    <div className="mt-3">
+      <p className="mb-1.5 text-xs font-semibold">Select the contractor</p>
+      <ul className="space-y-1.5">
+        {apps.map(a => (
+          <li key={String(a.o.id)}>
+            <button
+              disabled={busy}
+              onClick={() => (a.clean ? onSelect() : setRefused(a.o.id))}
+              className={cn(
+                "flex w-full items-center gap-2 rounded-md border px-2.5 py-2 text-left text-xs transition-colors",
+                refused === a.o.id ? "border-destructive bg-destructive/8" : "hover:bg-muted",
+                a.clean && "border-leaf/50"
+              )}
+            >
+              <span className={cn("rounded px-1 text-[10px] font-semibold uppercase", a.d === "PASS" ? "bg-leaf/15 text-leaf" : a.d === "REVIEW" ? "bg-warning/20 text-foreground" : "bg-destructive/15 text-destructive")}>{a.d.toLowerCase()}</span>
+              <span className="min-w-0 flex-1 truncate font-medium">{titleCase(a.o.name)}</span>
+              <span className="text-muted-foreground">Select</span>
+            </button>
+          </li>
         ))}
       </ul>
-    </motion.div>
-  )
-}
-
-// Applicants CRS screening turned away; they can't be selected.
-function BlockedApplicants({ live }: { live: Live }) {
-  const blocked = live.organizations
-    .filter(o => o.kind !== "AGENCY")
-    .map(o => ({ o, v: [...live.verifications].filter(z => z.orgId === o.id && z.subjectType === "ORG")[0] as (Live["verifications"][number] & { decision?: string }) | undefined }))
-    .filter(({ v }) => v && (v.decision ?? (v.passed ? "PASS" : "FAIL")) !== "PASS")
-  if (!blocked.length) return null
-  return (
-    <ul className="mt-3 space-y-1 rounded-md bg-muted/50 p-2.5 text-xs">
-      {blocked.slice(0, 5).map(({ o, v }) => (
-        <li key={String(o.id)} className="flex items-center gap-2">
-          <span className={cn("rounded px-1 text-[10px] font-semibold uppercase", (v?.decision ?? "FAIL") === "FAIL" ? "bg-destructive/15 text-destructive" : "bg-warning/20 text-foreground")}>
-            {(v?.decision ?? "FAIL").toLowerCase()}
-          </span>
-          <span className="truncate">{titleCase(o.name)} · blocked</span>
-        </li>
-      ))}
-    </ul>
+      {picked ? (
+        <motion.div key={String(picked.o.id)} initial={{ scale: 0.94, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="mt-2 rounded-md border-2 border-destructive bg-destructive/8 p-2.5 text-xs">
+          <p className="font-bold tracking-wide text-destructive uppercase">Not allowed</p>
+          <p className="mt-0.5">
+            {picked.d === "PASS"
+              ? `${titleCase(picked.o.name)} passed CRS but has records on file; this award requires a clean result.`
+              : `${titleCase(picked.o.name)} ${picked.d === "FAIL" ? "failed" : "was flagged in"} CRS screening and can't be awarded a contract.`}
+          </p>
+          <p className="mt-1 text-muted-foreground">{picked.reasons.length ? picked.reasons.slice(0, 2).map(crsReason).join(", ") : "No clean CRS result"} · open it in the report for every check</p>
+        </motion.div>
+      ) : null}
+    </div>
   )
 }
 
@@ -126,7 +164,7 @@ function BlockedApplicants({ live }: { live: Live }) {
 const PARTY_SCRIPT: Record<string, string[]> = {
   "prime-sign": ["Opening the contract", "Signing with a verified identity", "Setting the prime agent's mandate"],
   "gov-evidence": ["Uploading site-photo-railing-north.jpg", "Uploading site-photo-railing-south.jpg", "Attaching daily-report-1024.pdf", "Submitting for inspection"],
-  "gov-bill": ["Filling in the application for payment", "Billing line 1 · 0.05 USDC", "Submitting to City of Oakridge"],
+  "gov-bill": ["Filling in the application for payment", "Billing line 1 · half of the accepted line", "Submitting to City of Oakridge"],
   "sub-hire": ["Drafting the subcontract", "Okafor signs", "Nakamura signs", "Agents mandated on both sides"],
   "sub-work": ["Nakamura uploads photos", "Okafor's inspector accepts the work", "Nakamura sends its invoice"],
   "sub-approve": ["Nicole Farragut reviews the invoice", "Nicole approves", "Angela Morrissey approves"],
@@ -169,9 +207,8 @@ export function StepWindows({
   isCurrent,
   busy,
   onAct,
+  onActKey,
   onSkip,
-  onTryBad,
-  triedBad,
 }: {
   step: LiveStep
   live: Live
@@ -180,14 +217,46 @@ export function StepWindows({
   isCurrent: boolean
   busy: boolean
   onAct: () => void
+  onActKey?: (key: string) => void
   onSkip: () => void
-  onTryBad?: () => void
-  triedBad?: boolean
 }) {
   const x = projectParts(live, contractId)
   const bill = step.bill
   const sub = step.level === "sub"
   const contract = sub ? x.sub : x.contract
+
+  // The two agents settle the offer and swap documents.
+  if (step.kind === "agents") {
+    const msgs: [string, string][] = [
+      ["city", "Okafor Builders LLC was selected for the Oakridge Ave bridge railing repair. Please confirm your offer and send the award documents."],
+      ["okafor", "Confirmed: 0.10 USDC, one line (replace damaged railing sections). Start Oct 27, finish in 10 working days. Attaching the offer, schedule of values and insurance certificate."],
+      ["city", "Received. Payout wallet matches the one bound to your CRS-verified owner. Billing is progress-based, only on inspected and accepted work."],
+      ["okafor", "Understood. Subcontract planned for railing lights with Nakamura Electric (CRS-verified). Ready to sign."],
+      ["city", "Sending the contract for signature. Any change of payee, wallet or owner will freeze payment until re-verified."],
+    ]
+    return (
+      <Window title="Agent channel · city ⇄ Okafor" subtitle="mandated agents">
+        <ul className="space-y-2">
+          {msgs.map(([who, text], i) => (
+            <motion.li key={i} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 + i * 1.3 }} className={cn("flex", who === "okafor" && "justify-end")}>
+              <span className={cn("max-w-[85%] rounded-lg px-3 py-2 text-xs leading-relaxed", who === "city" ? "bg-muted" : "bg-primary/10")}>
+                <span className="block text-[10px] font-semibold text-muted-foreground uppercase">{who === "city" ? "City of Oakridge agent" : "Okafor Builders agent"}</span>
+                {text}
+              </span>
+            </motion.li>
+          ))}
+        </ul>
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 5.6 }} className="mt-3 flex flex-wrap gap-1.5">
+          {OFFER_FILES.map(f => (
+            <button key={f.name} onClick={() => downloadText(f.name, f.body)} className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] hover:bg-muted">
+              <FileDown className="size-3" /> {f.name}
+            </button>
+          ))}
+        </motion.div>
+        <p className="mt-2 text-[10.5px] text-muted-foreground">Messages scripted for the demo; files are downloadable.</p>
+      </Window>
+    )
+  }
 
   // The chosen contractor's checks.
   if (step.kind === "checks") {
@@ -230,6 +299,58 @@ export function StepWindows({
   // Counterparties: their screen, running by itself.
   if (step.kind === "party") return <>{step.who!.map((_, i) => <PartyScreen key={i} step={step} live={live} personas={personas} i={i} />)}</>
 
+  // Two approvers from the same org, one above the other in one window, each with their own button.
+  if (step.kind === "you" && step.pair && bill) {
+    return (
+      <Window title={step.danger ? "Two approvers · reject the change" : "Two approvers · payment"} subtitle="City of Oakridge">
+        <p className="text-xs text-muted-foreground">
+          {step.danger ? "Each reviews the case file. Both must reject before the frozen payment moves." : `Each reviews ${docNo(bill)} against the contract, inspection and CRS check. Both must approve.`}
+        </p>
+        <ul className="mt-3 divide-y rounded-lg border">
+          {step.who!.map((w, i) => {
+            const p = personas.find(q => q.key === w.persona)
+            const member = p ? live.members.find(m => m.displayName.toUpperCase() === p.name.toUpperCase()) : undefined
+            const vote = member
+              ? live.approvals.find(
+                  a => a.invoiceId === bill.id && a.kind === step.voteKind && a.approver.toHexString() === member.identity.toHexString() && (step.voteKind === "UNFREEZE" || a.round === bill.approvalRound)
+                )
+              : undefined
+            const done = step.done || !!vote
+            return (
+              <li key={w.persona} className="p-3">
+                <div className="flex items-center gap-3">
+                  <span className="grid size-9 shrink-0 place-items-center rounded-full bg-muted text-xs font-semibold">{i + 1}</span>
+                  <div className="min-w-0 flex-1 leading-tight">
+                    <p className="truncate text-sm font-semibold">{titleCase(p?.name ?? "")}</p>
+                    <p className="truncate text-[11px] text-muted-foreground">{p?.title}</p>
+                    <p className="mt-0.5 flex items-center gap-1 text-[11px] text-leaf">
+                      <ShieldCheck className="size-3" /> CRS verified · {short(member?.identityHash ?? "", 4, 4)}
+                    </p>
+                  </div>
+                  {done ? (
+                    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-leaf/15 px-2.5 py-1 text-xs font-medium text-leaf">
+                      <Check className="size-3.5" /> {step.danger ? "Rejected" : "Approved"}
+                    </span>
+                  ) : isCurrent ? (
+                    <button
+                      onClick={() => onActKey?.(step.pair![i])}
+                      disabled={busy}
+                      className={cn("inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md px-4 text-sm font-semibold disabled:opacity-70", step.danger ? "bg-destructive text-background" : "bg-primary text-primary-foreground")}
+                    >
+                      {busy ? <Loader2 className="size-4 animate-spin" /> : null}
+                      {step.verb}
+                    </button>
+                  ) : null}
+                </div>
+                {vote?.reason ? <p className="mt-2 pl-12 text-[11px] text-muted-foreground">“{vote.reason}”</p> : null}
+              </li>
+            )
+          })}
+        </ul>
+      </Window>
+    )
+  }
+
   // Your turn: your person's window with the button.
   if (step.kind === "you") {
     const w = step.who![0]
@@ -240,9 +361,8 @@ export function StepWindows({
         <IdBadge name={p?.name ?? ""} title={p?.title} kind="AGENCY" orgName="City of Oakridge Public Works" verified={member?.verified} hash={member?.identityHash} />
         <p className="mt-3 text-sm text-muted-foreground">{step.explain}</p>
         {step.key === "post" ? <AgencyVerified live={live} /> : null}
-        {step.key === "select" ? <BlockedApplicants live={live} /> : null}
-        {step.key === "select" && isCurrent && !step.done ? <TryBadPick live={live} tried={!!triedBad} onTry={onTryBad} /> : null}
-        {isCurrent && !step.done ? (
+        {step.key === "select" && isCurrent && !step.done ? <ApplicantPicker live={live} busy={busy} onSelect={onAct} /> : null}
+        {isCurrent && !step.done && step.key !== "select" ? (
           <button
             onClick={onAct}
             disabled={busy}
@@ -386,6 +506,11 @@ export function StepWindows({
             ))}
             <Line d={2} tone="ok">
               200 OK · attestation {short(v.identityHash, 6, 4)}
+            </Line>
+            <Line d={2.3} tone={v.identityHash === payee?.identityHash ? "ok" : undefined}>
+              {v.identityHash === payee?.identityHash
+                ? `✓ matches the hash on file from the award (${short(payee?.identityHash ?? "", 6, 4)}): same owner`
+                : `! differs from the hash on file (${short(payee?.identityHash ?? "", 6, 4)}): payment frozen for review`}
             </Line>
           </>
         ) : (

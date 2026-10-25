@@ -20,7 +20,7 @@ import type { DbConnection } from "@/lib/module_bindings"
 import type { Persona } from "@/lib/spacetime"
 
 export type Who = { persona: string; org: "AGENCY" | "PRIME" | "SUB" }
-export type StepKind = "you" | "party" | "agent" | "crs" | "payout" | "risk" | "fraud" | "screen" | "checks"
+export type StepKind = "you" | "party" | "agent" | "crs" | "payout" | "risk" | "fraud" | "screen" | "checks" | "agents"
 export type LiveStep = {
   key: string
   level: "setup" | "gov" | "sub"
@@ -32,6 +32,25 @@ export type LiveStep = {
   danger?: boolean
   done: boolean
   bill?: Live["invoices"][number]
+  // Two people from the same org act side by side: the step key each of them performs, and which vote it casts.
+  pair?: string[]
+  voteKind?: "PAYMENT" | "UNFREEZE"
+}
+
+// What the city fills in (or extracts from an uploaded request for bids) before posting a new project.
+export type ProjectBrief = { title: string; location: string; scope: string; line: string; amount: string; finish: string }
+export const DEFAULT_BRIEF: ProjectBrief = {
+  title: "Bridge railing repair",
+  location: "Oakridge Avenue bridge over Mill Creek",
+  scope: "Remove and replace damaged steel railing sections on the north and south spans",
+  line: "Replace damaged railing sections",
+  amount: "0.10",
+  finish: "Nov 14, 2026",
+}
+// Contract sum in atomic USDC, kept between 0.05 and 0.50 so the demo treasuries can pay it.
+export const briefAtomic = (b: ProjectBrief) => {
+  const n = Math.round((Number.parseFloat(b.amount) || 0.1) * 1_000_000)
+  return BigInt(Math.min(500_000, Math.max(50_000, n)))
 }
 
 export const IMPOSTOR_WALLET = "0x76464e7a6f4e797B32558ebA21134b41Fcb14A81"
@@ -62,7 +81,7 @@ const FIN2: Who = { persona: "agencyFin2", org: "AGENCY" }
 const PRIME_AP: Who = { persona: "primeAP", org: "PRIME" }
 const SUB_OWNER: Who = { persona: "subOwner", org: "SUB" }
 
-export type DemoFlags = { fraudSkipped: boolean; posted: boolean; screened: boolean; selected: boolean; checked: boolean }
+export type DemoFlags = { fraudSkipped: boolean; posted: boolean; screened: boolean; selected: boolean; checked: boolean; negotiated: boolean }
 
 export function buildSteps(live: Live, contractId: bigint | undefined, flags: DemoFlags): LiveStep[] {
   const { fraudSkipped } = flags
@@ -74,7 +93,6 @@ export function buildSteps(live: Live, contractId: bigint | undefined, flags: De
   const sigs = x.deal ? live.signatures.filter(s => s.dealId === x.deal!.id) : []
   const votes = (b?: Live["invoices"][number]) =>
     b ? live.approvals.filter(a => a.invoiceId === b.id && a.kind === "PAYMENT" && a.round === b.approvalRound && a.vote === "APPROVE").length : 0
-  const unfreezeVotes = b1 && x.change ? live.approvals.filter(a => a.invoiceId === b1.id && a.kind === "UNFREEZE").length : 0
   const caseFile = b1 ? live.findings.some(f => f.kind === "RISK_CASE" && f.subjectId === b1.id) : false
   const fraudHappened = !!x.change
 
@@ -82,8 +100,9 @@ export function buildSteps(live: Live, contractId: bigint | undefined, flags: De
   const steps: LiveStep[] = [
     { key: "post", level: "setup", kind: "you", title: "Post the project", explain: "Your agency is CRS-verified, and so is everyone who'll sign or approve. Publish the job for bids.", who: [AGENCY_PM], verb: "Post for bids", done: started || flags.posted },
     { key: "screen", level: "setup", kind: "screen", title: "Contractors apply · CRS screens each one", explain: "Before anyone looks at a price, every applicant's identity, credit, liens, sanctions and registry are checked.", done: started || flags.screened },
-    { key: "select", level: "setup", kind: "you", title: "Select the contractor", explain: "Only applicants that passed CRS screening can be selected. Try a failed one to see it blocked.", who: [AGENCY_PM], verb: "Select Okafor Builders", done: started || flags.selected },
+    { key: "select", level: "setup", kind: "you", title: "Select the contractor", explain: "Pick the contractor. Only an applicant with a clean CRS result can be awarded the contract.", who: [AGENCY_PM], verb: "Select Okafor Builders", done: started || flags.selected },
     { key: "checks", level: "setup", kind: "checks", title: "Okafor Builders LLC is selected", explain: "Before it can sign, every check has to come back clean.", done: started || flags.checked },
+    { key: "negotiate", level: "setup", kind: "agents", title: "The agents settle the offer", explain: "Your agent and Okafor's verified agent exchange the offer and documents. You review them before issuing.", done: started || flags.negotiated },
     { key: "issue", level: "setup", kind: "you", title: "Issue the contract", explain: "Award the job to Okafor Builders with its schedule of values.", who: [AGENCY_PM], verb: "Issue contract", done: !!x.contract },
     { key: "prime-sign", level: "setup", kind: "party", title: "Okafor Builders signs", explain: "The prime's verified signer signs and sets what its AI agent may do.", who: [PRIME_AP], done: !!x.contract && sigs.some(s => s.orgId === x.contract!.payeeOrgId) },
     { key: "agency-sign", level: "setup", kind: "you", title: "Countersign and mandate your agent", explain: "Sign with your verified identity and set your agent's scope and budget.", who: [AGENCY_PM], verb: "Countersign", done: x.deal?.state === "ACTIVE" },
@@ -108,13 +127,11 @@ export function buildSteps(live: Live, contractId: bigint | undefined, flags: De
   if (fraudHappened) {
     steps.push(
       { key: "gov-freeze", level: "gov", kind: "risk", title: "Payment frozen · agent investigates", explain: "The bill freezes instantly. Your agent re-verifies the payee and checks who sent the request.", done: caseFile, bill: b1 },
-      { key: "gov-reject1", level: "gov", kind: "you", title: "Reject the wallet change", explain: "The sender failed identity verification. Keep paying the verified wallet.", who: [FIN1], verb: "Reject change", danger: true, done: unfreezeVotes >= 1 || x.change?.state !== "PENDING", bill: b1 },
-      { key: "gov-reject2", level: "gov", kind: "you", title: "Second approver rejects it", explain: "Two different people must agree before a frozen payment moves.", who: [FIN2], verb: "Reject change", danger: true, done: x.change?.state !== "PENDING", bill: b1 }
+      { key: "gov-reject", level: "gov", kind: "you", title: "Both approvers reject the wallet change", explain: "The sender failed identity verification. Two different people must agree before a frozen payment moves.", who: [FIN1, FIN2], verb: "Reject change", danger: true, done: x.change?.state !== "PENDING", bill: b1, pair: ["gov-reject1", "gov-reject2"], voteKind: "UNFREEZE" }
     )
   }
   steps.push(
-    { key: "gov-approve1", level: "gov", kind: "you", title: "Approve the payment", explain: "A verified finance approver signs off. Never the requester, never an agent.", who: [FIN1], verb: "Approve", done: !!b1 && (votes(b1) >= 1 || at(s1) >= at("APPROVED")), bill: b1 },
-    { key: "gov-approve2", level: "gov", kind: "you", title: "Second approval", explain: "A different person must agree before money moves.", who: [FIN2], verb: "Approve", done: !!b1 && at(s1) >= at("APPROVED"), bill: b1 },
+    { key: "gov-approve", level: "gov", kind: "you", title: "Two approvers sign off", explain: "Two different verified finance approvers must each approve. Never the requester, never an agent.", who: [FIN1, FIN2], verb: "Approve", done: !!b1 && at(s1) >= at("APPROVED"), bill: b1, pair: ["gov-approve1", "gov-approve2"], voteKind: "PAYMENT" },
     { key: "gov-paid", level: "gov", kind: "payout", title: "USDC settles on the verified wallet", explain: "Paid from your treasury on Base Sepolia, to the wallet bound to Okafor's verified owner.", done: s1 === "SETTLED", bill: b1 },
 
     { key: "sub-hire", level: "sub", kind: "party", title: "Okafor hires a subcontractor", explain: "Same rules downstream: verified signers on both sides, mandated agents.", who: [PRIME_AP, SUB_OWNER], done: x.subDeal?.state === "ACTIVE" },
@@ -163,7 +180,7 @@ export function usePersonaActor(personas: Persona[]) {
   return useCallback(
     async (key: string) => {
       const p = personas.find(x => x.key === key)
-      if (!p?.token) throw new Error(`No demo login for ${key}`)
+      if (!p?.token) throw new Error(personas.some(x => x.token) ? `No demo login for ${key}` : "This copy of GovFlow has no demo logins, so it can only watch. Add seed/.demo-tokens.json (on Runpod: the DEMO_TOKENS_JSON secret) to act.")
       if (!pending.current.has(key)) pending.current.set(key, connectAs(p.token).catch(e => (pending.current.delete(key), Promise.reject(e))))
       return (await pending.current.get(key)!).reducers
     },
@@ -174,7 +191,7 @@ export function usePersonaActor(personas: Persona[]) {
 type As = ReturnType<typeof usePersonaActor>
 
 // The real calls behind a step (button or automatic). Returns the new contract id for "issue".
-export async function performStep(step: LiveStep, getLive: () => Live, contractId: bigint | undefined, as: As): Promise<bigint | undefined> {
+export async function performStep(step: LiveStep, getLive: () => Live, contractId: bigint | undefined, as: As, brief: ProjectBrief = DEFAULT_BRIEF): Promise<bigint | undefined> {
   const live = getLive()
   const x = projectParts(live, contractId)
   const prime = live.organizations.find(o => o.kind === "PRIME")
@@ -188,11 +205,12 @@ export async function performStep(step: LiveStep, getLive: () => Live, contractI
     case "screen":
     case "select":
     case "checks":
+    case "negotiate":
       return // shown from CRS results already on file; nothing to write
     case "issue": {
       if (!prime) throw new Error("No prime contractor seeded")
-      const title = `Bridge railing repair · ${stamp}`
-      await (await as("agencyPM")).createDeal({ kind: "PRIME_CONTRACT", payeeOrgId: prime.id, parentContractId: undefined, title, lines: [{ description: "Replace damaged railing sections", scheduledValue: 100_000n }] })
+      const title = `${brief.title.trim() || DEFAULT_BRIEF.title} · ${stamp}`
+      await (await as("agencyPM")).createDeal({ kind: "PRIME_CONTRACT", payeeOrgId: prime.id, parentContractId: undefined, title, lines: [{ description: brief.line.trim() || DEFAULT_BRIEF.line, scheduledValue: briefAtomic(brief) }] })
       return (await until(getLive, l => l.contracts.find(k => k.title === title), "the new contract")).id
     }
     case "prime-sign": {
@@ -217,7 +235,7 @@ export async function performStep(step: LiveStep, getLive: () => Live, contractI
       if (!x.line1 || !x.contract) return
       let b = x.bill1
       if (!b) {
-        await (await as("primeAP")).draftInvoice({ contractId: x.contract.id, milestoneIds: [x.line1.id], amount: 50_000n, memo: "Pay application: railing repair progress", agentId: "" })
+        await (await as("primeAP")).draftInvoice({ contractId: x.contract.id, milestoneIds: [x.line1.id], amount: x.line1.scheduledValue / 2n, memo: `Pay application: ${x.line1.description.toLowerCase()} progress`, agentId: "" })
         b = await until(getLive, () => part().bill1, "the draft")
       }
       if (b.state === "DRAFT") await (await as("primeAP")).submitInvoice({ invoiceId: b.id })

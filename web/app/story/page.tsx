@@ -24,7 +24,8 @@ import { useDirector, type Phase } from "@/lib/director"
 import { cn } from "@/lib/utils"
 
 const noop = () => () => {}
-const PHASE_INDEX: Record<Phase, number> = { issue: 0, screen: 1, pick: 2, papers: 3, award: 4, pay1: 5, plan: 6, pay2: 7, done: 8 }
+// The first two slides (problem, solution) come before the live run.
+const PHASE_INDEX: Record<Phase, number> = { issue: 2, screen: 3, pick: 4, papers: 5, award: 6, pay1: 7, plan: 8, pay2: 9, done: 10 }
 
 export default function StoryPage() {
   const mounted = useSyncExternalStore(noop, () => true, () => false)

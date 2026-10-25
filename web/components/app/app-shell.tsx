@@ -1,13 +1,13 @@
 "use client"
 
 /**
- * The frame around every page: sunlit backdrop, a slim top bar (mark, project, live pulse island, day/night toggle, "viewing as"), the page with a soft fade-and-grow transition, and the floating dock for navigation.
+ * The frame around every page: sunlit backdrop, a slim top bar (mark, project, the main tabs, search and day/night toggle) and the page with a soft fade-and-grow transition.
  *
  * Inputs:
  * - Current path, theme, live data
  *
  * Outputs:
- * - Backdrop + top bar + animated page + dock
+ * - Backdrop + top bar + animated page
  */
 
 import Link from "next/link"
@@ -15,33 +15,46 @@ import { usePathname } from "next/navigation"
 import { Suspense, type ReactNode } from "react"
 import { motion } from "motion/react"
 import { useTheme } from "next-themes"
-import { BookOpenCheck, Building2, Clapperboard, HardHat, Landmark, MonitorPlay, Moon, Receipt, ShieldCheck, Sun, Waypoints } from "lucide-react"
-import { Dock } from "@/components/watermelon/dock"
-import { PulseIsland } from "@/components/app/pulse-island"
+import { Building2, Clapperboard, Gavel, MonitorPlay, Moon, Receipt, Sun } from "lucide-react"
 import { SolarBackdrop } from "@/components/app/solar-backdrop"
 import { Logo } from "@/components/app/logo"
 import { useLive } from "@/components/app/providers"
-import { DemoGuide } from "@/components/app/demo-guide"
+import { cn } from "@/lib/utils"
 import { CommandMenu } from "@/components/app/command-menu"
 import { useEmbed } from "@/lib/url-flags"
 
-const GROUPS = [
-  [
-    { id: "story", label: "Project story · full demo", href: "/story", Icon: Clapperboard },
-    { id: "flow", label: "Payment flow", href: "/", Icon: Waypoints },
-    { id: "live", label: "Live · run it step by step", href: "/live", Icon: MonitorPlay },
-    { id: "bills", label: "Bills", href: "/bills", Icon: Receipt },
-  ],
-  [
-    { id: "agency", label: "Agency room", href: "/agency", Icon: Landmark },
-    { id: "prime", label: "Prime contractor room", href: "/prime", Icon: Building2 },
-    { id: "sub", label: "Subcontractor room", href: "/sub", Icon: HardHat },
-  ],
-  [
-    { id: "vendors", label: "Vendor checks", href: "/answer-key", Icon: ShieldCheck },
-    { id: "ledger", label: "Ledger", href: "/ledger", Icon: BookOpenCheck },
-  ],
+// The main tabs; everything else (payment flow, envelope, ledger, vendor checks…) is in ⌘K.
+const TABS = [
+  { label: "Live", href: "/live", Icon: MonitorPlay },
+  { label: "Open tenders", href: "/tenders", Icon: Gavel },
+  { label: "Bills", href: "/bills", Icon: Receipt },
+  { label: "Rooms", href: "/rooms", Icon: Building2 },
+  { label: "Story", href: "/story", Icon: Clapperboard },
 ]
+
+function Tabs() {
+  const path = usePathname()
+  return (
+    <nav className="flex items-center gap-0.5 rounded-xl border bg-card p-1 shadow-xs">
+      {TABS.map(({ label, href, Icon }) => {
+        const active = path.startsWith(href)
+        return (
+          <Link
+            key={href}
+            href={href}
+            className={cn(
+              "inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-sm font-medium transition-colors",
+              active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"
+            )}
+          >
+            <Icon className="size-4" />
+            <span className="max-md:hidden">{label}</span>
+          </Link>
+        )
+      })}
+    </nav>
+  )
+}
 
 function ThemeToggle() {
   const { resolvedTheme, setTheme } = useTheme()
@@ -74,21 +87,10 @@ function AnimatedPage({ children }: { children: ReactNode }) {
       initial={{ opacity: 0, y: 14, filter: "blur(6px)" }}
       animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
       transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-      className="mx-auto w-full max-w-6xl px-4 pt-6 pb-36 md:px-8"
+      className="mx-auto w-full max-w-6xl px-4 pt-6 pb-16 md:px-8"
     >
       {children}
     </motion.main>
-  )
-}
-
-// The dock floats over every page except Live, which is a full workspace (⌘K still navigates).
-function DockSlot() {
-  const path = usePathname()
-  if (path.startsWith("/live")) return null
-  return (
-    <div className="fixed inset-x-0 bottom-5 z-30 flex justify-center px-4">
-      <Dock groups={GROUPS} />
-    </div>
   )
 }
 
@@ -107,29 +109,25 @@ export function AppShell({ children }: { children: ReactNode }) {
       <header className="sticky top-0 z-30 px-4 pt-3 pb-4 md:px-8">
         {/* Frosted backing on its own layer so the pulse island's dropdown isn't masked. */}
         <div aria-hidden className="absolute inset-0 -z-10 bg-background/90 backdrop-blur-xl [mask-image:linear-gradient(to_bottom,black_88%,transparent)]" />
-        <div className="mx-auto grid max-w-6xl grid-cols-[1fr_auto_1fr] items-start gap-3">
-          <Link href="/" className="flex items-center gap-2.5 justify-self-start pt-1">
+        <div className="mx-auto grid max-w-6xl grid-cols-[1fr_auto_1fr] items-center gap-3">
+          <Link href="/live" className="flex items-center gap-2.5 justify-self-start">
             <Logo className="size-8" />
             <span className="grid leading-none">
               <span className="text-lg font-semibold tracking-tight">GovFlow</span>
               <ProjectLabel />
             </span>
           </Link>
-          <div className="h-10 w-[300px] max-sm:w-[220px]">
-            <PulseIsland />
-          </div>
+          <Suspense fallback={null}>
+            <Tabs />
+          </Suspense>
           <div className="flex items-center gap-2 justify-self-end">
             <CommandMenu />
-            <DemoGuide />
             <ThemeToggle />
           </div>
         </div>
       </header>
       <Suspense fallback={<main className="mx-auto max-w-6xl px-4 pt-6 md:px-8">{children}</main>}>
         <AnimatedPage>{children}</AnimatedPage>
-      </Suspense>
-      <Suspense fallback={null}>
-        <DockSlot />
       </Suspense>
     </div>
   )
