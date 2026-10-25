@@ -1,10 +1,12 @@
 # GovFlow
 
-Verified, multiplayer payments for public construction. A city pays its prime contractor, and the prime pays its
-subcontractor, in test USDC on Base Sepolia. Before anyone is awarded a contract or paid, their identity is checked with
-CRS. Claude agents check every bill, and two verified people approve every payment.
+GovFlow limits fraud on public contracts, making systems seamless and secure. CRS verifies every payee, Claude checks every bill, and USDC moves only after two verified people approve.
 
-Hackathon build. Testnet only, CRS sandbox personas only. Full spec in `PROJECT.md`, hack plan and disclosures in `HACK.md`.
+- Verified parties. Before a contract is awarded, GovFlow runs CRS sandbox checks on the business and the people behind it: TransUnion identity, credit file, PitchPoint liens and judgments, and Fraud Finder. An applicant who fails can't be selected. The database itself refuses the award. Only an attestation hash is stored, never the raw data.
+- Claude reads the paperwork. Claude pulls company and owner details out of uploaded bid documents and matches them to CRS-verified companies. It then reads each pay application against the contract, the schedule of values and the accepted milestones, and returns MATCHED, MISMATCH or UNSURE with reasons.
+- Agents pay for their own checks. Before any payout, the payer's agent buys a fresh CRS check on the payee for 0.01 test USDC over x402. The new result has to match the identity recorded at award.
+- Fraud freeze. A "new wallet" email freezes the bill instantly. The agent re-verifies the payee, checks the claimed sender against CRS, and Claude writes a case file. Two approvers then reject the change.
+- Two approvals, then settlement. USDC settles on Base Sepolia to the verified wallet. The same rules apply one level down, from prime to subcontractor.
 
 ![Live: selecting the contractor after CRS screening](docs/live.jpg)
 
